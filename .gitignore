@@ -1,0 +1,4 @@
+.ipynb_checkpoints
+*.svg
+*.swp
+__pycache__

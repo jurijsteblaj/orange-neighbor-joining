@@ -1,6 +1,8 @@
 # Neighbor Joining for Orange
 
-This project will implement [neighbor joining](https://en.wikipedia.org/wiki/Neighbor_joining) for [Orange](https://github.com/biolab/orange3). See Examples.ipynb for examples of use.
+This project will implement [neighbor joining](https://en.wikipedia.org/wiki/Neighbor_joining) for [Orange](https://github.com/biolab/orange3).
+
+See Examples.ipynb for examples of use. Some examples need data added to the data directory for them to work.
 
 ## neighbor_joining
 

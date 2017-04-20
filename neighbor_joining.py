@@ -7,7 +7,7 @@ from scipy.spatial.distance import pdist
 import matplotlib.pyplot as plt
 
 
-def neighbor_joining(d):
+def neighbor_joining(d):    
     D = ma.array(d, copy=True)
     D.mask = ma.make_mask_none(D.shape)
     joined_nodes = []
@@ -16,20 +16,19 @@ def neighbor_joining(d):
     
     n = len(D) - len(joined_nodes)
     while n > 2:
-        # 1
-        a = np.sum(D, axis=0) * np.ones((len(D), 1))
-        b = a.T
-        Q = (n - 2)*D - b - a
-
+        # Based on the current distance matrix calculate the matrix Q
+        row_sums = np.sum(D, axis=1)
+        Q = ((n - 2)*D - row_sums).T - row_sums
+        
         Q.mask[np.diag_indices(len(Q))] = True
         
-        # 2
+        # Find the pair of distinct taxa i and j for which Q (i, j) has its lowest value
         ix = ma.argmin(Q)
         i = ix % len(Q)
         j = int(ix/len(Q))
         
-        # 3
-        dist_i = D[i,j]/2 + (b[i,0] - b[j,0])/(2*(n - 2))
+        # Calculate the distance from each of the taxa in the pair to this new node
+        dist_i = D[i,j]/2 + (row_sums[i] - row_sums[j])/(2*(n - 2))
         dist_j = D[i,j] - dist_i
         
         if i not in result:
@@ -43,12 +42,17 @@ def neighbor_joining(d):
         result[len(D)].append([i, dist_i])
         result[len(D)].append([j, dist_j])
         
-        # 4
+        # Calculate the distance from each of the taxa outside of this pair to the new node
         dist = D[i,j]
         i_col = D[:,i]
         j_col = D[:,j]
         new = (i_col + j_col - dist)/2
         
+        # Add the new node to the distance matrix
+        D = ma.vstack((D, new))
+        D = ma.column_stack((D, ma.append(new, (0))))
+        
+        # Remove the two nodes which were joined
         D.mask[i,:] = True
         D.mask[j,:] = True
         D.mask[:,i] = True
@@ -56,9 +60,6 @@ def neighbor_joining(d):
 
         joined_nodes.append(i)
         joined_nodes.append(j)
-        
-        D = ma.vstack((D, new))
-        D = ma.column_stack((D, ma.append(new, (0))))
 
         D.mask[-1,joined_nodes] = True
         D.mask[joined_nodes,-1] = True
@@ -66,21 +67,23 @@ def neighbor_joining(d):
         
         n = len(D) - len(joined_nodes)
     
+    # Join the last two remaining nodes
     ix = ma.argmax(D)
     i = ix % len(Q)
     j = int(ix/len(Q))
     
     if i not in result:
         result[i] = []
-    result[i].append((j, D[i,j]))
+    result[i].append([j, D[i,j]])
     if j not in result:
         result[j] = []
-    result[j].append((i, D[i,j]))
+    result[j].append([i, D[i,j]])
     
     return result
 
 
 def children(tree, v):
+    """Return a list of indexes of child nodes of a parent node in a tree."""
     if len(tree[v]) == 0:
         return []
     else:
@@ -105,6 +108,7 @@ def rooted(tree, root=0):
 
 
 def distance(tree, parent, child):
+    """Return distance between a parent and a child node in a tree."""
     ix = children(tree, parent).index(child)
     return tree[parent][ix][1]
 
@@ -133,6 +137,10 @@ def preorder_traversal(tree, v, parent, root, x, l, omega, tau):
 
         
 def get_points(rooted_tree, root=0):
+    """See 3.1 in:
+    Bachmaier, Christian, Ulrik Brandes, and Barbara Schlieper.
+    "Drawing phylogenetic trees." Algorithms and Computation (2005): 1110-1121.
+    """
     l = {}
     x = {}
     omega = {}

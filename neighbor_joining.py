@@ -1,3 +1,4 @@
+from itertools import chain
 from math import cos, sin, pi, atan2
 
 import numpy as np
@@ -137,7 +138,7 @@ def preorder_traversal(tree, v, parent, root, x, l, omega, tau):
 
         
 def get_points(rooted_tree, root=0):
-    """See 3.1 in:
+    """See Algorithm 1: RADIAL-LAYOUT in:
     Bachmaier, Christian, Ulrik Brandes, and Barbara Schlieper.
     "Drawing phylogenetic trees." Algorithms and Computation (2005): 1110-1121.
     """
@@ -198,5 +199,82 @@ def plot(tree, points, labels=[], classes=None):
         for c in classes:
             plt.plot([points[x][0] for x in c], [points[x][1] for x in c], ".", ms=3)
     
-    plt.savefig("output.svg")
+    #plt.savefig("output.svg")
     plt.show()
+
+
+
+def deg_r(rooted_tree, v, root):
+    """Get degree of a node in a rooted tree."""
+    if v == root:
+        return len(children(rooted_tree, v))
+    else:
+        return len(children(rooted_tree, v)) + 1
+
+
+def postorder_traversal_circular(tree, v, root, i, k, parent, c, d, s):
+    for w in children(tree, v):
+        i = postorder_traversal_circular(tree, w, root, i, k, v, c, d, s)
+    if deg_r(tree, v, root) == 1:
+        c[v] = 0
+        d[v] = np.array((cos(2 * pi * i / k), sin(2 * pi * i / k)))
+        i += 1
+    else:
+        S = 0
+        if parent is None:
+            neighbors = children(tree, v)
+        else:
+            neighbors = chain([parent], children(tree, v))
+        for w in neighbors:
+            if v == root:
+                s[v, w] = 1 / distance(tree, v, w)
+                S += s[v, w]
+            elif w == parent:
+                s[w, v] = 1 / (distance(tree, w, v))
+                S += s[w, v]
+            else:
+                s[v, w] = 1 / (distance(tree, v, w) * (deg_r(tree, v, root) - 1))
+                S += s[v, w]
+
+        t1 = 0
+        t2 = 0
+        for w in children(tree, v):
+            t1 += s[v, w] / S * c[w]
+            t2 += s[v, w] / S * d[w]
+        if v != root:
+            c[v] = s[parent, v] / (S * (1 - t1))
+        d[v] = t2 / (1 - t1)
+    return i
+
+
+def preorder_traversal_circular(tree, v, root, parent, x, c, d):
+    if v == root:
+        x[v] = d[v]
+    else:
+        x[v] = c[v] * x[parent] + d[v]
+
+    for w in children(tree, v):
+        preorder_traversal_circular(tree, w, root, v, x, c, d)
+
+
+def get_points_circular(rooted_tree, root=0):
+    """See Algorithm 2: CIRCLE-LAYOUT in:
+    Bachmaier, Christian, Ulrik Brandes, and Barbara Schlieper.
+    "Drawing phylogenetic trees." Algorithms and Computation (2005): 1110-1121.
+
+    It is important to remove negative distances in the tree before running this function.
+    """
+    i = 0
+    k = 0
+    s = {}
+    x = {}
+    c = {}
+    d = {}
+    for v in rooted_tree:
+        if deg_r(rooted_tree, v, root) == 1:
+            k += 1
+
+    postorder_traversal_circular(rooted_tree, root, root, i, k, None, c, d, s)
+    preorder_traversal_circular(rooted_tree, root, root, None, x, c, d)
+
+    return x

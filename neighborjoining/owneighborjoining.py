@@ -28,7 +28,7 @@ from AnyQt.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 import pyqtgraph.graphicsItems.ScatterPlotItem
 import pyqtgraph as pg
 
-from Orange.data import Table, Variable
+from Orange.data import Table, Variable, Domain, ContinuousVariable
 from Orange.data.sql.table import SqlTable
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
@@ -530,7 +530,13 @@ class OWNeighborJoining(widget.OWWidget):
                         l[0][1] += l[1][1] - self.min_dist
                         l[1][1] = self.min_dist
             points = get_points(self.tree, self.root)
-            self.data = Table(np.array([points[ix] for ix in points]))
+            self.real = np.arange(matrix.shape[0])
+            self.new = np.arange(self.real[-1], len(points))
+            domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
+                            matrix.row_items.domain.class_var,
+                            source=matrix.row_items.domain)
+            self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]),
+                                         np.array(list(matrix.row_items.Y) + [-1]*(len(points) - len(matrix.row_items.Y))))
             data = self.data
 
             if data is not None and len(data):
@@ -743,6 +749,7 @@ class OWNeighborJoining(widget.OWWidget):
             lines = pg.PlotDataItem(X[l],Y[l], connect="pairs")
             self.viewbox.addItem(lines)
 
+        size_data[self.new] = size_data[self.new]/5
         self._item = ScatterPlotItem(
             X, Y,
             pen=pen_data,

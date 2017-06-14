@@ -199,7 +199,7 @@ def plot(tree, points, labels=[], classes=None):
         for c in classes:
             plt.plot([points[x][0] for x in c], [points[x][1] for x in c], ".", ms=3)
     
-    #plt.savefig("output.svg")
+    # plt.savefig("output.svg")
     plt.show()
 
 

@@ -2,3 +2,4 @@
 *.svg
 *.swp
 __pycache__
+*.egg-info

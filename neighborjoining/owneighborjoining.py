@@ -519,6 +519,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.clear()
         self.information()
 
+        self.matrix = matrix
         if matrix is not None:
             self.tree = neighbor_joining(matrix)
             self.rooted_tree = rooted(self.tree, self.root)
@@ -1036,13 +1037,13 @@ class OWNeighborJoining(widget.OWWidget):
         subset = None
         indices = None
         if self.data is not None and self._selection_mask is not None:
-            indices = np.flatnonzero(self._selection_mask)
+            indices = np.flatnonzero(self._selection_mask[:len(self.matrix.row_items)])
             if len(indices) > 0:
-                subset = self.data[indices]
+                subset = self.matrix.row_items[indices]
 
         self.send("Selected Data", subset)
         self.send(ANNOTATED_DATA_SIGNAL_NAME,
-                  create_annotated_table(self.data, indices))
+                  create_annotated_table(self.matrix.row_items, indices))
 
     def send_report(self):
         self.report_plot(name="", plot=self.viewbox.getViewBox())

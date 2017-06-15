@@ -200,7 +200,6 @@ class OWNeighborJoining(widget.OWWidget):
 
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
-    jitter_value = settings.Setting(0)
 
     class_density = settings.Setting(False)
     resolution = 256
@@ -233,64 +232,10 @@ class OWNeighborJoining(widget.OWWidget):
         self.__selection_item = None
         self.__replot_requested = False
 
-        box = gui.vBox(self.controlArea, "Axes")
-
-        box1 = gui.vBox(box, "Displayed", margin=0)
-        box1.setFlat(True)
-        self.active_view = view = QListView(
-            sizePolicy=QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Ignored),
-            selectionMode=QListView.ExtendedSelection,
-            dragEnabled=True,
-            defaultDropAction=Qt.MoveAction,
-            dragDropOverwriteMode=False,
-            dragDropMode=QListView.DragDrop,
-            showDropIndicator=True,
-            minimumHeight=100,
-        )
-
-        view.viewport().setAcceptDrops(True)
-        movedown = QAction(
-            "Move down", view,
-            shortcut=QKeySequence(Qt.AltModifier | Qt.Key_Down),
-            triggered=self.__deactivate_selection
-        )
-        view.addAction(movedown)
-
-        self.varmodel_selected = model = VariableListModel(
+        self.varmodel_selected = VariableListModel(
             parent=self, enable_dnd=True)
 
-        model.rowsInserted.connect(self._invalidate_plot)
-        model.rowsRemoved.connect(self._invalidate_plot)
-        model.rowsMoved.connect(self._invalidate_plot)
-
-        view.setModel(model)
-
-        box1.layout().addWidget(view)
-
-        box1 = gui.vBox(box, "Other", margin=0)
-        box1.setFlat(True)
-        self.other_view = view = QListView(
-            sizePolicy=QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Ignored),
-            selectionMode=QListView.ExtendedSelection,
-            dragEnabled=True,
-            defaultDropAction=Qt.MoveAction,
-            dragDropOverwriteMode=False,
-            dragDropMode=QListView.DragDrop,
-            showDropIndicator=True,
-            minimumHeight=100
-        )
-        view.viewport().setAcceptDrops(True)
-        moveup = QAction(
-            "Move up", view,
-            shortcut=QKeySequence(Qt.AltModifier | Qt.Key_Up),
-            triggered=self.__activate_selection
-        )
-        view.addAction(moveup)
-
-        self.varmodel_other = model = VariableListModel(parent=self, enable_dnd=True)
-        view.setModel(model)
-
-        box1.layout().addWidget(view)
+        self.varmodel_other = VariableListModel(parent=self, enable_dnd=True)
 
         box = gui.vBox(self.controlArea, box=True)
         box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
@@ -348,12 +293,6 @@ class OWNeighborJoining(widget.OWWidget):
             tickPosition=QSlider.TicksBelow)
         size_slider.valueChanged.connect(self._set_size)
         form.addRow("", size_slider)
-
-        cb = self.jitter_combo = gui.comboBox(
-            box, self, "jitter_value",
-            items=["None", "0.01 %", "0.1 %", "0.5 %", "1 %", "2 %"],
-            callback=self._invalidate_plot)
-        form.addRow("Jittering:", cb)
 
         toolbox = gui.vBox(self.controlArea, "Zoom/Select")
         toollayout = QHBoxLayout()
@@ -533,7 +472,7 @@ class OWNeighborJoining(widget.OWWidget):
                         l[1][1] = self.min_dist
             points = get_points(self.tree, self.root)
             self.real = np.arange(matrix.shape[0])
-            self.new = np.arange(self.real[-1], len(points))
+            self.new = np.arange(self.real[-1]+1, len(points))
             domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
                             matrix.row_items.domain.class_var,
                             source=matrix.row_items.domain)
@@ -654,10 +593,10 @@ class OWNeighborJoining(widget.OWWidget):
 
     def _initialize(self, data):
         # Initialize the GUI controls from data's domain.
-        all_vars = list(data.domain.variables)
-        cont_vars = [var for var in data.domain.variables
+        all_vars = list(self.matrix.row_items.domain.variables)
+        cont_vars = [var for var in self.matrix.row_items.domain.variables
                      if var.is_continuous]
-        disc_vars = [var for var in data.domain.variables
+        disc_vars = [var for var in self.matrix.row_items.domain.variables
                      if var.is_discrete]
         shape_vars = [var for var in disc_vars
                       if len(var.values) <= len(ScatterPlotItem.Symbols) - 1]
@@ -666,8 +605,8 @@ class OWNeighborJoining(widget.OWWidget):
                      shown=not len(cont_vars))
 
         self.all_vars = data.domain.variables
-        self.varmodel_selected[:] = cont_vars[:3]
-        self.varmodel_other[:] = cont_vars[3:]
+        self.varmodel_selected[:] = [var for var in data.domain.variables if var.is_continuous]
+        self.varmodel_other[:] = []
 
         self.colorvar_model[:] = ["Same color"] + all_vars
         self.sizevar_model[:] = ["Same size"] + cont_vars
@@ -704,8 +643,8 @@ class OWNeighborJoining(widget.OWWidget):
         """
         Return the column data and mask for variable `var`
         """
-        X, _ = self.data.get_column_view(var)
-        return column_data(self.data, var, dtype)
+        X, _ = self.matrix.row_items.get_column_view(var)
+        return column_data(self.matrix.row_items, var, dtype)
 
     def _setup_plot(self, reset_view=True):
         self.__replot_requested = False
@@ -715,7 +654,7 @@ class OWNeighborJoining(widget.OWWidget):
         if not variables:
             return
 
-        coords = [self._get_data(var, dtype=float)[0] for var in variables]
+        coords = [self.data.X[:,0], self.data.X[:,1]]
         coords = np.vstack(coords)
         p, N = coords.shape
         assert N == len(self.data), p == len(variables)
@@ -732,26 +671,16 @@ class OWNeighborJoining(widget.OWWidget):
             X = plotutils.normalized(X)
             Y = plotutils.normalized(Y)
 
-        pen_data, brush_data = self._color_data(mask)
-        size_data = self._size_data(mask)
+        pen_data, brush_data = self._color_data()
+        size_data = self._size_data()
         shape_data = self._shape_data(mask)
-
-        if self.jitter_value > 0:
-            value = [0, 0.01, 0.1, 0.5, 1, 2][self.jitter_value]
-
-            rstate = np.random.RandomState(0)
-            jitter_x = (rstate.random_sample(X.shape) * 2 - 1) * value / 100
-            rstate = np.random.RandomState(1)
-            jitter_y = (rstate.random_sample(Y.shape) * 2 - 1) * value / 100
-            X += jitter_x
-            Y += jitter_y
 
         if self.rooted_tree is not None:
             l = list(chain.from_iterable((ix1, ix2) for ix1 in self.rooted_tree for ix2, _ in self.rooted_tree[ix1]))
             lines = pg.PlotDataItem(X[l],Y[l], connect="pairs")
             self.viewbox.addItem(lines)
 
-        size_data[self.new] *= self.new_node_size_mult
+        size_data[self.new] = self.point_size * self.new_node_size_mult
         self._item = ScatterPlotItem(
             X, Y,
             pen=pen_data,
@@ -764,12 +693,6 @@ class OWNeighborJoining(widget.OWWidget):
         self._item._mask = mask
 
         self.viewbox.addItem(self._item)
-
-        for i, axis in enumerate(axes.T):
-            axis_item = AxisItem(line=QLineF(0, 0, axis[0], axis[1]),
-                                 label=variables[i].name)
-            axis_item.setPen(QPen(Qt.darkGray, 0))
-            self.viewbox.addItem(axis_item)
 
         if reset_view:
             self.viewbox.setRange(QRectF(-1.05, -1.05, 2.1, 2.1))
@@ -796,6 +719,7 @@ class OWNeighborJoining(widget.OWWidget):
                     color_data, len(color_var.values),
                     color_index=color_var.colors
                 )
+            color_data = np.vstack((color_data, [QColor(Qt.darkGray).getRgb()[:3]] * len(self.new)))
             if mask is not None:
                 color_data = color_data[mask]
 
@@ -989,7 +913,10 @@ class OWNeighborJoining(widget.OWWidget):
         Set (update) the current point size.
         """
         if self._item is not None:
-            size[self.new] *= self.new_node_size_mult
+            if len(size) <= self.new[0]:
+                size = np.hstack((size, np.full(len(self.new), self.point_size * self.new_node_size_mult)))
+            else:
+                size[self.new] = self.point_size * self.new_node_size_mult
             self._item.setSize(size[self._item._mask])
 
     def _set_alpha(self, value):
@@ -1074,10 +1001,6 @@ class OWNeighborJoining(widget.OWWidget):
             ("Size",
              self.size_index > 0 and self.sizevar_model[self.size_index])
         ))
-        jitter_caption = report.render_items_vert(
-            (("Jittering",
-              self.jitter_value > 0 and self.jitter_combo.currentText()),))
-        caption = ";<br/>".join(x for x in (caption, jitter_caption) if x)
         self.report_caption(caption)
 
 

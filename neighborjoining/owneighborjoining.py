@@ -42,7 +42,7 @@ from Orange.widgets.utils import classdensity
 from Orange.canvas import report
 
 
-from neighborjoining.neighbor_joining import neighbor_joining, rooted, get_points, get_points_circular
+from neighborjoining.neighbor_joining import neighbor_joining, rooted, get_points, get_points_circular, children
 
 
 class ScatterPlotItem(pg.ScatterPlotItem):
@@ -1003,6 +1003,20 @@ class OWNeighborJoining(widget.OWWidget):
     def _selection_finish(self, path):
         self.select(path)
 
+    def propagate_selection(self, indices):
+        new_indices = np.zeros(len(self.selection_tree), dtype=np.bool)
+
+        def propagate(new_indices, current_root):
+            if not new_indices[current_root]:
+                new_indices[current_root] = True
+                for child in children(self.selection_tree, current_root):
+                    propagate(new_indices, child)
+
+        for ix in indices:
+            propagate(new_indices, ix)
+
+        return np.nonzero(new_indices)
+
     def select(self, selectionshape):
         item = self._item
         if item is None:
@@ -1011,6 +1025,11 @@ class OWNeighborJoining(widget.OWWidget):
         indices = [spot.data()
                    for spot in item.points()
                    if selectionshape.contains(spot.pos())]
+
+        self.select_children = True
+        self.selection_tree = self.rooted_tree
+        if self.select_children:
+            indices = self.propagate_selection(indices)
 
         self.select_indices(indices, QApplication.keyboardModifiers())
 

@@ -209,6 +209,7 @@ class OWNeighborJoining(widget.OWWidget):
 
     legend_anchor = settings.Setting(((1, 0), (1, 0)))
     MinPointSize = 6
+    new_node_size_mult = 0.2
 
     ReplotRequest = QEvent.registerEventType()
 
@@ -749,7 +750,7 @@ class OWNeighborJoining(widget.OWWidget):
             lines = pg.PlotDataItem(X[l],Y[l], connect="pairs")
             self.viewbox.addItem(lines)
 
-        size_data[self.new] = size_data[self.new]/5
+        size_data[self.new] *= self.new_node_size_mult
         self._item = ScatterPlotItem(
             X, Y,
             pen=pen_data,
@@ -987,6 +988,7 @@ class OWNeighborJoining(widget.OWWidget):
         Set (update) the current point size.
         """
         if self._item is not None:
+            size[self.new] *= self.new_node_size_mult
             self._item.setSize(size[self._item._mask])
 
     def _set_alpha(self, value):

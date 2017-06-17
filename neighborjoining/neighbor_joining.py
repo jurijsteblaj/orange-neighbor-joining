@@ -1,3 +1,4 @@
+from copy import deepcopy
 from itertools import chain
 from math import cos, sin, pi, atan2
 
@@ -102,7 +103,7 @@ def remove_backlink(t, child, parent):
 
         
 def rooted(tree, root=0):
-    t = tree.copy()
+    t = deepcopy(tree)
     for child in children(t, root):
         remove_backlink(t, child, root)
     return t

@@ -180,21 +180,22 @@ class LegendItem(LegendItem):
             event.ignore()
 
 
+Algorithm = namedtuple("Algorithm", ["name", "function"])
+DRAWING_ALGORITHMS = (
+    Algorithm("radial", get_points),
+    Algorithm("circular", get_points_circular)
+)
+
+
 class OWNeighborJoining(widget.OWWidget):
     name = "Neighbor Joining"
-    description = "Display a phylogram constructed from the input distance " \
-                  "matrix with neighbor joining."
+    description = "Display a phylogram constructed with neighbor joining " \
+                  "from the inputted distance matrix."
     priority = 100
 
     inputs = [("Distances", DistMatrix, "set_distances")]
     outputs = [("Selected Data", Table, widget.Default),
                (ANNOTATED_DATA_SIGNAL_NAME, Table)]
-
-    Algorithm = namedtuple("Algorithm", ["name", "function"])
-    drawing_algorithms = (
-        Algorithm("radial", get_points),
-        Algorithm("circular", get_points_circular)
-    )
 
     settingsHandler = settings.DomainContextHandler()
 
@@ -229,6 +230,8 @@ class OWNeighborJoining(widget.OWWidget):
         self.root = 0
         self.tree = None
         self.rooted_tree = None
+        self.selection_tree = None
+        self.selecting_root = False
 
         self.matrix = None
         self.real = None
@@ -272,12 +275,15 @@ class OWNeighborJoining(widget.OWWidget):
 
         cb = gui.comboBox(box, self, "drawing_setting",
                           callback=on_drawing_change,
-                          items=tuple(alg.name for alg in self.drawing_algorithms),
+                          items=tuple(alg.name for alg in DRAWING_ALGORITHMS),
                           contentsLength=10)
         form.addRow("Drawing:", cb)
 
         descendants_cb = gui.checkBox(box, self, "select_descendants", label=None)
         form.addRow("Select descendants", descendants_cb)
+
+        button = gui.button(box, self, "Select new root", toggleButton=True, value="selecting_root")
+        form.addRow(button)
 
         cb = gui.comboBox(box, self, "color_index",
                           callback=self._on_color_change,
@@ -484,7 +490,7 @@ class OWNeighborJoining(widget.OWWidget):
         if self.matrix is None:
             return
 
-        points = self.drawing_algorithms[self.drawing_setting].function(self.tree, self.root)
+        points = DRAWING_ALGORITHMS[self.drawing_setting].function(self.rooted_tree, self.root)
         self.real = np.arange(self.matrix.shape[0])
         self.new = np.arange(self.real[-1] + 1, len(points))
         domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
@@ -503,6 +509,7 @@ class OWNeighborJoining(widget.OWWidget):
         if matrix is not None:
             self.tree = neighbor_joining(matrix)
             self.rooted_tree = rooted(self.tree, self.root)
+            self.selection_tree = self.rooted_tree
             for l in self.rooted_tree.values():
                 if len(l) >= 2:
                     if l[0][1] < self.min_dist:
@@ -980,11 +987,16 @@ class OWNeighborJoining(widget.OWWidget):
                    for spot in item.points()
                    if selectionshape.contains(spot.pos())]
 
-        self.selection_tree = self.rooted_tree
-        if self.select_descendants:
-            indices = self.propagate_selection(indices)
+        if self.selecting_root:
+            if len(indices) > 0:
+                index = indices[0]
+                self.selection_tree = rooted(self.tree, index)
+                self.selecting_root = False
+        else:
+            if self.select_descendants:
+                indices = self.propagate_selection(indices)
 
-        self.select_indices(indices, QApplication.keyboardModifiers())
+            self.select_indices(indices, QApplication.keyboardModifiers())
 
     def select_indices(self, indices, modifiers=Qt.NoModifier):
         if self.data is None:

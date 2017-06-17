@@ -207,6 +207,7 @@ class OWNeighborJoining(widget.OWWidget):
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
     drawing_setting = settings.Setting(0)
+    select_descendants = settings.Setting(True)
 
     class_density = settings.Setting(False)
     resolution = 256
@@ -274,6 +275,9 @@ class OWNeighborJoining(widget.OWWidget):
                           items=tuple(alg.name for alg in self.drawing_algorithms),
                           contentsLength=10)
         form.addRow("Drawing:", cb)
+
+        descendants_cb = gui.checkBox(box, self, "select_descendants", label=None)
+        form.addRow("Select descendants", descendants_cb)
 
         cb = gui.comboBox(box, self, "color_index",
                           callback=self._on_color_change,
@@ -976,9 +980,8 @@ class OWNeighborJoining(widget.OWWidget):
                    for spot in item.points()
                    if selectionshape.contains(spot.pos())]
 
-        self.select_children = True
         self.selection_tree = self.rooted_tree
-        if self.select_children:
+        if self.select_descendants:
             indices = self.propagate_selection(indices)
 
         self.select_indices(indices, QApplication.keyboardModifiers())

@@ -3,7 +3,7 @@ Neighbor joining widget
 ------------------------
 
 """
-
+from collections import namedtuple
 from functools import reduce
 from operator import itemgetter
 from types import SimpleNamespace as namespace
@@ -190,6 +190,12 @@ class OWNeighborJoining(widget.OWWidget):
     outputs = [("Selected Data", Table, widget.Default),
                (ANNOTATED_DATA_SIGNAL_NAME, Table)]
 
+    Algorithm = namedtuple("Algorithm", ["name", "function"])
+    drawing_algorithms = (
+        Algorithm("radial", get_points),
+        Algorithm("circular", get_points_circular)
+    )
+
     settingsHandler = settings.DomainContextHandler()
 
     variable_state = settings.ContextSetting({})
@@ -200,6 +206,7 @@ class OWNeighborJoining(widget.OWWidget):
 
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
+    drawing_setting = settings.Setting(0)
 
     class_density = settings.Setting(False)
     resolution = 256
@@ -222,6 +229,9 @@ class OWNeighborJoining(widget.OWWidget):
         self.tree = None
         self.rooted_tree = None
 
+        self.matrix = None
+        self.real = None
+        self.new = None
         self.data = None
         self.subset_data = None
         self._subset_mask = None
@@ -251,6 +261,19 @@ class OWNeighborJoining(widget.OWWidget):
             spacing=8
         )
         box.layout().addLayout(form)
+
+        def on_drawing_change():
+            if self.matrix is None:
+                return
+
+            self.calculate_points()
+            self._setup_plot()
+
+        cb = gui.comboBox(box, self, "drawing_setting",
+                          callback=on_drawing_change,
+                          items=tuple(alg.name for alg in self.drawing_algorithms),
+                          contentsLength=10)
+        form.addRow("Drawing:", cb)
 
         cb = gui.comboBox(box, self, "color_index",
                           callback=self._on_color_change,
@@ -453,6 +476,20 @@ class OWNeighborJoining(widget.OWWidget):
             QApplication.postEvent(self, QEvent(self.ReplotRequest),
                                    Qt.LowEventPriority - 10)
 
+    def calculate_points(self):
+        if self.matrix is None:
+            return
+
+        points = self.drawing_algorithms[self.drawing_setting].function(self.tree, self.root)
+        self.real = np.arange(self.matrix.shape[0])
+        self.new = np.arange(self.real[-1] + 1, len(points))
+        domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
+                        self.matrix.row_items.domain.class_var,
+                        source=self.matrix.row_items.domain)
+        self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]),
+                                     np.array(list(self.matrix.row_items.Y) + [-1] * (
+                                     len(points) - len(self.matrix.row_items.Y))))
+
     def set_distances(self, matrix):
         self.closeContext()
         self.clear()
@@ -470,18 +507,11 @@ class OWNeighborJoining(widget.OWWidget):
                     if l[1][1] < self.min_dist:
                         l[0][1] += l[1][1] - self.min_dist
                         l[1][1] = self.min_dist
-            points = get_points(self.tree, self.root)
-            self.real = np.arange(matrix.shape[0])
-            self.new = np.arange(self.real[-1]+1, len(points))
-            domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
-                            matrix.row_items.domain.class_var,
-                            source=matrix.row_items.domain)
-            self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]),
-                                         np.array(list(matrix.row_items.Y) + [-1]*(len(points) - len(matrix.row_items.Y))))
-            data = self.data
 
-            if data is not None and len(data):
-                self._initialize(data)
+            self.calculate_points()
+
+            if self.data is not None and len(self.data):
+                self._initialize(self.data)
                 # get the default encoded state, replacing the position with Inf
                 state = self._encode_var_state(
                     [list(self.varmodel_selected), list(self.varmodel_other)]
@@ -489,7 +519,7 @@ class OWNeighborJoining(widget.OWWidget):
                 state = {key: (source_ind, np.inf) for key, (source_ind, _)
                          in state.items()}
 
-                self.openContext(data.domain)
+                self.openContext(self.data.domain)
                 selected_keys = [key
                                  for key, (sind, _) in self.variable_state.items()
                                  if sind == 0]
@@ -650,23 +680,13 @@ class OWNeighborJoining(widget.OWWidget):
         self.__replot_requested = False
         self.clear_plot()
 
-        variables = list(self.varmodel_selected)
-        if not variables:
-            return
-
         coords = [self.data.X[:,0], self.data.X[:,1]]
         coords = np.vstack(coords)
-        p, N = coords.shape
-        assert N == len(self.data), p == len(variables)
-
-        axes = linproj.defaultaxes(len(variables))
-
-        assert axes.shape == (2, p)
 
         mask = ~np.logical_or.reduce(np.isnan(coords), axis=0)
         coords = coords[:, mask]
 
-        X, Y = np.dot(axes, coords)
+        X, Y = coords
         if X.size and Y.size:
             X = plotutils.normalized(X)
             Y = plotutils.normalized(Y)
@@ -680,7 +700,10 @@ class OWNeighborJoining(widget.OWWidget):
             lines = pg.PlotDataItem(X[l],Y[l], connect="pairs")
             self.viewbox.addItem(lines)
 
-        size_data[self.new] = self.point_size * self.new_node_size_mult
+        if size_data.shape == self.real.shape:
+            size_data = np.hstack((size_data, np.full(self.new.shape, self.point_size * self.new_node_size_mult)))
+        else:
+            size_data[self.new] = self.point_size * self.new_node_size_mult
         self._item = ScatterPlotItem(
             X, Y,
             pen=pen_data,
@@ -988,8 +1011,11 @@ class OWNeighborJoining(widget.OWWidget):
                 subset = self.matrix.row_items[indices]
 
         self.send("Selected Data", subset)
-        self.send(ANNOTATED_DATA_SIGNAL_NAME,
-                  create_annotated_table(self.matrix.row_items, indices))
+        if self.matrix is not None:
+            self.send(ANNOTATED_DATA_SIGNAL_NAME,
+                      create_annotated_table(self.matrix.row_items, indices))
+        else:
+            self.send(ANNOTATED_DATA_SIGNAL_NAME, None)
 
     def send_report(self):
         self.report_plot(name="", plot=self.viewbox.getViewBox())

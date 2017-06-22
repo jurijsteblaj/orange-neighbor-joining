@@ -204,7 +204,6 @@ def plot(tree, points, labels=[], classes=None):
     plt.show()
 
 
-
 def deg_r(rooted_tree, v, root):
     """Get degree of a node in a rooted tree."""
     if v == root:

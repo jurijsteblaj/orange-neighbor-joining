@@ -5,43 +5,38 @@ Neighbor joining widget
 """
 from collections import namedtuple
 from functools import reduce
+from itertools import chain
+from math import atan2, pi, cos, sin
 from operator import itemgetter
 from types import SimpleNamespace as namespace
 from xml.sax.saxutils import escape
-import pkg_resources
-from itertools import chain
 
 import numpy as np
-
-from AnyQt.QtWidgets import (
-    QListView, QSlider, QToolButton, QFormLayout, QHBoxLayout,
-    QSizePolicy, QAction, QActionGroup, QGraphicsLineItem, QGraphicsPathItem,
-    QGraphicsRectItem, QPinchGesture, QApplication
-)
+import pkg_resources
+import pyqtgraph as pg
+import pyqtgraph.graphicsItems.ScatterPlotItem
+from AnyQt.QtCore import Qt, QObject, QEvent, QSize, QRectF, QLineF, QPointF
+from AnyQt.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from AnyQt.QtGui import (
     QColor, QPen, QBrush, QKeySequence, QPainterPath, QPainter, QTransform,
     QCursor, QIcon
 )
-from AnyQt.QtCore import Qt, QObject, QEvent, QSize, QRectF, QLineF, QPointF, QMimeData
-from AnyQt.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
-
-import pyqtgraph.graphicsItems.ScatterPlotItem
-import pyqtgraph as pg
-
-from Orange.data import Table, Variable, Domain, ContinuousVariable
-from Orange.data.sql.table import SqlTable
+from AnyQt.QtWidgets import (
+    QSlider, QToolButton, QFormLayout, QHBoxLayout,
+    QSizePolicy, QAction, QActionGroup, QGraphicsLineItem, QGraphicsPathItem,
+    QGraphicsRectItem, QPinchGesture, QApplication
+)
+from Orange.canvas import report
+from Orange.data import Table, Variable, Domain, ContinuousVariable, TimeVariable
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
+from Orange.widgets.utils import classdensity
 from Orange.widgets.utils import colorpalette
 from Orange.widgets.utils.annotated_data import (
     create_annotated_table, ANNOTATED_DATA_SIGNAL_NAME
 )
 from Orange.widgets.utils.itemmodels import VariableListModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
-from Orange.widgets.utils import classdensity
-from Orange.canvas import report
-
-
 from neighborjoining.neighbor_joining import neighbor_joining, rooted, get_points, get_points_circular, children
 
 
@@ -201,6 +196,7 @@ class OWNeighborJoining(widget.OWWidget):
 
     variable_state = settings.ContextSetting({})
 
+    label_index = settings.ContextSetting(0)
     color_index = settings.ContextSetting(0)
     shape_index = settings.ContextSetting(0)
     size_index = settings.ContextSetting(0)
@@ -254,6 +250,7 @@ class OWNeighborJoining(widget.OWWidget):
         box = gui.vBox(self.controlArea, box=True)
         box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
 
+        self.labelvar_model = VariableListModel(parent=self, enable_dnd=True)
         self.colorvar_model = VariableListModel(parent=self, enable_dnd=True)
         self.shapevar_model = VariableListModel(parent=self, enable_dnd=True)
         self.sizevar_model = VariableListModel(parent=self, enable_dnd=True)
@@ -284,6 +281,12 @@ class OWNeighborJoining(widget.OWWidget):
 
         button = gui.button(box, self, "Select new root", toggleButton=True, value="selecting_root")
         form.addRow(button)
+
+        cb = gui.comboBox(box, self, "label_index",
+                          callback=self._on_label_change,
+                          contentsLength=10)
+        cb.setModel(self.labelvar_model)
+        form.addRow("Labels:", cb)
 
         cb = gui.comboBox(box, self, "color_index",
                           callback=self._on_color_change,
@@ -443,6 +446,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.sizevar_model[:] = []
         self.shapevar_model[:] = []
 
+        self.label_index = 0
         self.color_index = 0
         self.size_index = 0
         self.shape_index = 0
@@ -496,9 +500,11 @@ class OWNeighborJoining(widget.OWWidget):
         domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
                         self.matrix.row_items.domain.class_var,
                         source=self.matrix.row_items.domain)
-        self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]),
-                                     np.array(list(self.matrix.row_items.Y) + [-1] * (
-                                     len(points) - len(self.matrix.row_items.Y))))
+        if self.matrix.row_items.Y.size > 0:
+            self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]),
+                                         np.array(list(self.matrix.row_items.Y) + [-1] * len(self.new)))
+        else:
+            self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]))
 
     def set_distances(self, matrix):
         self.closeContext()
@@ -507,6 +513,7 @@ class OWNeighborJoining(widget.OWWidget):
 
         self.matrix = matrix
         if matrix is not None:
+            self.root = len(matrix)
             self.tree = neighbor_joining(matrix)
             self.rooted_tree = rooted(self.tree, self.root)
             self.selection_tree = self.rooted_tree
@@ -553,6 +560,8 @@ class OWNeighborJoining(widget.OWWidget):
                 def clip_index(value, maxv):
                     return max(0, min(value, maxv))
 
+                self.label_index = clip_index(
+                    self.label_index, len(self.labelvar_model) - 1)
                 self.color_index = clip_index(
                     self.color_index, len(self.colorvar_model) - 1)
                 self.shape_index = clip_index(
@@ -605,6 +614,12 @@ class OWNeighborJoining(widget.OWWidget):
         return [[var for _, var in sorted(newlist, key=itemgetter(0))]
                 for newlist in newlists]
 
+    def label_var(self):
+        if 1 <= self.label_index < len(self.labelvar_model):
+            return self.labelvar_model[self.label_index]
+        else:
+            return None
+
     def color_var(self):
         """
         Current selected color variable or None (if not selected).
@@ -649,6 +664,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.varmodel_selected[:] = [var for var in data.domain.variables if var.is_continuous]
         self.varmodel_other[:] = []
 
+        self.labelvar_model[:] = ["No labels"] + all_vars + list(self.matrix.row_items.domain.metas)
         self.colorvar_model[:] = ["Same color"] + all_vars
         self.sizevar_model[:] = ["Same size"] + cont_vars
         self.shapevar_model[:] = ["Same shape"] + shape_vars
@@ -698,9 +714,11 @@ class OWNeighborJoining(widget.OWWidget):
         coords = coords[:, mask]
 
         X, Y = coords
-        if X.size and Y.size:
-            X = plotutils.normalized(X)
-            Y = plotutils.normalized(Y)
+        X -= X.mean()
+        Y -= Y.mean()
+        maxspan = max(X.max() - X.min(), Y.max() - Y.min())
+        X /= maxspan
+        Y /= maxspan
 
         pen_data, brush_data = self._color_data()
         size_data = self._size_data()
@@ -728,6 +746,27 @@ class OWNeighborJoining(widget.OWWidget):
 
         self.viewbox.addItem(self._item)
 
+        self._labels = []
+        if DRAWING_ALGORITHMS[self.drawing_setting].name == "radial":
+            angles = np.empty(self.real.shape)
+            for v1 in self.rooted_tree:
+                for v2 in children(self.rooted_tree, v1):
+                    if v2 < len(self.real):
+                        delta = self.data.X[v2,:2] - self.data.X[v1,:2]
+                        angles[v2] = atan2(delta[1], delta[0])
+        for i in self.real:
+            if DRAWING_ALGORITHMS[self.drawing_setting].name == "circular":
+                angle = atan2(Y[i], X[i])
+            elif DRAWING_ALGORITHMS[self.drawing_setting].name == "radial":
+                angle = angles[i]
+
+            item = pg.TextItem("", anchor=(0, 0.5), angle=angle*180/pi)
+            item.setPos(X[i], Y[i])
+            self.viewbox.addItem(item)
+            self._labels.append(item)
+
+        self.set_label(self._label_data(mask=None))
+
         if reset_view:
             self.viewbox.setRange(QRectF(-1.05, -1.05, 2.1, 2.1))
         self._update_legend()
@@ -740,6 +779,27 @@ class OWNeighborJoining(widget.OWWidget):
             self._density_img = classdensity.class_density_image(
                 min_x, max_x, min_y, max_y, self.resolution, X, Y, rgb_data)
             self.viewbox.addItem(self._density_img)
+
+    def _label_data(self, mask=None):
+        label_var = self.label_var()
+        if label_var is None:
+            label_data = np.full(self.real.shape, "")
+        else:
+            if label_var.is_string:
+                label_data, label_mask = self._get_data(label_var, dtype=str)
+            else:
+                label_data, label_mask = self._get_data(label_var, dtype=float)
+                label_data = np.array(list(map(label_var.repr_val, label_data)))
+            label_data[label_mask] = ""
+        if mask is None:
+            return label_data
+        else:
+            return label_data[mask]
+
+    def _on_label_change(self):
+        if self.data is None:
+            return
+        self.set_label(self._label_data(mask=None))
 
     def _color_data(self, mask=None):
         color_var = self.color_var()
@@ -934,6 +994,10 @@ class OWNeighborJoining(widget.OWWidget):
                 ScatterPlotItem(pen=color, brush=color, symbol=symbol, size=10),
                 escape(name)
             )
+
+    def set_label(self, labels):
+        for i in self.real:
+            self._labels[i].setHtml('<span style="font-size: 9px; color: black;">'+labels[i]+'</span>')
 
     def set_shape(self, shape):
         """
@@ -1552,7 +1616,10 @@ def column_data(table, var, dtype):
         # from mixes metas domain
         col = col.astype(float)
         copy = True
-    mask = np.isnan(col)
+    if var.is_string:
+        mask = (col == "")
+    else:
+        mask = np.isnan(col)
     if dtype != col.dtype:
         col = col.astype(dtype)
         copy = True
@@ -1637,7 +1704,7 @@ def test_main(argv=None):
     if argv:
         filename = argv[0]
     else:
-        filename = "iris"
+        filename = "yeast-class-RPR"
 
     data = Table(filename)
     matrix = distance.Euclidean(distance._preprocess(data))

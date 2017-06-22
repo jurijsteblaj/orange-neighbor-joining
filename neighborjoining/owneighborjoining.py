@@ -194,8 +194,6 @@ class OWNeighborJoining(widget.OWWidget):
 
     settingsHandler = settings.DomainContextHandler()
 
-    variable_state = settings.ContextSetting({})
-
     label_index = settings.ContextSetting(0)
     color_index = settings.ContextSetting(0)
     shape_index = settings.ContextSetting(0)
@@ -233,19 +231,12 @@ class OWNeighborJoining(widget.OWWidget):
         self.real = None
         self.new = None
         self.data = None
-        self.subset_data = None
-        self._subset_mask = None
         self._selection_mask = None
         self._item = None
         self._density_img = None
         self.__legend = None
         self.__selection_item = None
         self.__replot_requested = False
-
-        self.varmodel_selected = VariableListModel(
-            parent=self, enable_dnd=True)
-
-        self.varmodel_other = VariableListModel(parent=self, enable_dnd=True)
 
         box = gui.vBox(self.controlArea, box=True)
         box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
@@ -436,11 +427,7 @@ class OWNeighborJoining(widget.OWWidget):
 
     def clear(self):
         self.data = None
-        self._subset_mask = None
         self._selection_mask = None
-
-        self.varmodel_selected[:] = []
-        self.varmodel_other[:] = []
 
         self.colorvar_model[:] = []
         self.sizevar_model[:] = []
@@ -493,18 +480,10 @@ class OWNeighborJoining(widget.OWWidget):
     def calculate_points(self):
         if self.matrix is None:
             return
-
         points = DRAWING_ALGORITHMS[self.drawing_setting].function(self.rooted_tree, self.root)
         self.real = np.arange(self.matrix.shape[0])
         self.new = np.arange(self.real[-1] + 1, len(points))
-        domain = Domain([ContinuousVariable.make("X"), ContinuousVariable.make("Y")],
-                        self.matrix.row_items.domain.class_var,
-                        source=self.matrix.row_items.domain)
-        if self.matrix.row_items.Y.size > 0:
-            self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]),
-                                         np.array(list(self.matrix.row_items.Y) + [-1] * len(self.new)))
-        else:
-            self.data = Table.from_numpy(domain, np.array([points[ix] for ix in points]))
+        self.data = np.array([points[ix] for ix in points])
 
     def set_distances(self, matrix):
         self.closeContext()
@@ -529,33 +508,8 @@ class OWNeighborJoining(widget.OWWidget):
             self.calculate_points()
 
             if self.data is not None and len(self.data):
-                self._initialize(self.data)
-                # get the default encoded state, replacing the position with Inf
-                state = self._encode_var_state(
-                    [list(self.varmodel_selected), list(self.varmodel_other)]
-                )
-                state = {key: (source_ind, np.inf) for key, (source_ind, _)
-                         in state.items()}
-
-                self.openContext(self.data.domain)
-                selected_keys = [key
-                                 for key, (sind, _) in self.variable_state.items()
-                                 if sind == 0]
-
-                if set(selected_keys).issubset(set(state.keys())):
-                    pass
-
-                # update the defaults state (the encoded state must contain
-                # all variables in the input domain)
-                state.update(self.variable_state)
-                # ... and restore it with saved positions taking precedence over
-                # the defaults
-                selected, other = self._decode_var_state(
-                    state, [list(self.varmodel_selected),
-                            list(self.varmodel_other)]
-                )
-                self.varmodel_selected[:] = selected
-                self.varmodel_other[:] = other
+                self._initialize()
+                self.openContext(self.matrix.row_items.domain)
 
                 def clip_index(value, maxv):
                     return max(0, min(value, maxv))
@@ -572,15 +526,6 @@ class OWNeighborJoining(widget.OWWidget):
                 self._invalidate_plot()
 
     def handleNewSignals(self):
-        if self.subset_data is not None and self._subset_mask is None:
-            # Update the plot's highlight items
-            if self.data is not None:
-                dataids = self.data.ids.ravel()
-                subsetids = np.unique(self.subset_data.ids)
-                self._subset_mask = np.in1d(
-                    dataids, subsetids, assume_unique=True)
-                self._invalidate_plot()
-
         self.commit()
 
     def customEvent(self, event):
@@ -589,12 +534,6 @@ class OWNeighborJoining(widget.OWWidget):
             self._setup_plot()
         else:
             super().customEvent(event)
-
-    def closeContext(self):
-        self.variable_state = self._encode_var_state(
-            [list(self.varmodel_selected), list(self.varmodel_other)]
-        )
-        super().closeContext()
 
     @staticmethod
     def _encode_var_state(lists):
@@ -647,7 +586,7 @@ class OWNeighborJoining(widget.OWWidget):
         else:
             return None
 
-    def _initialize(self, data):
+    def _initialize(self):
         # Initialize the GUI controls from data's domain.
         all_vars = list(self.matrix.row_items.domain.variables)
         cont_vars = [var for var in self.matrix.row_items.domain.variables
@@ -657,44 +596,13 @@ class OWNeighborJoining(widget.OWWidget):
         shape_vars = [var for var in disc_vars
                       if len(var.values) <= len(ScatterPlotItem.Symbols) - 1]
 
-        self.warning("Plotting requires continuous features.",
-                     shown=not len(cont_vars))
-
-        self.all_vars = data.domain.variables
-        self.varmodel_selected[:] = [var for var in data.domain.variables if var.is_continuous]
-        self.varmodel_other[:] = []
-
         self.labelvar_model[:] = ["No labels"] + all_vars + list(self.matrix.row_items.domain.metas)
         self.colorvar_model[:] = ["Same color"] + all_vars
         self.sizevar_model[:] = ["Same size"] + cont_vars
         self.shapevar_model[:] = ["Same shape"] + shape_vars
 
-        if data.domain.has_discrete_class:
-            self.color_index = all_vars.index(data.domain.class_var) + 1
-
-    def __activate_selection(self):
-        view = self.other_view
-        model = self.varmodel_other
-        indices = view.selectionModel().selectedRows()
-
-        variables = [model.data(ind, Qt.EditRole) for ind in indices]
-
-        for i in sorted((ind.row() for ind in indices), reverse=True):
-            del model[i]
-
-        self.varmodel_selected.extend(variables)
-
-    def __deactivate_selection(self):
-        view = self.active_view
-        model = self.varmodel_selected
-        indices = view.selectionModel().selectedRows()
-
-        variables = [model.data(ind, Qt.EditRole) for ind in indices]
-
-        for i in sorted((ind.row() for ind in indices), reverse=True):
-            del model[i]
-
-        self.varmodel_other.extend(variables)
+        if self.matrix.row_items.domain.has_discrete_class:
+            self.color_index = all_vars.index(self.matrix.row_items.domain.class_var) + 1
 
     def _get_data(self, var, dtype):
         """
@@ -707,7 +615,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.__replot_requested = False
         self.clear_plot()
 
-        coords = [self.data.X[:,0], self.data.X[:,1]]
+        coords = [self.data[:,0], self.data[:,1]]
         coords = np.vstack(coords)
 
         mask = ~np.logical_or.reduce(np.isnan(coords), axis=0)
@@ -752,7 +660,7 @@ class OWNeighborJoining(widget.OWWidget):
             for v1 in self.rooted_tree:
                 for v2 in children(self.rooted_tree, v1):
                     if v2 < len(self.real):
-                        delta = self.data.X[v2,:2] - self.data.X[v1,:2]
+                        delta = self.data[v2,:2] - self.data[v1,:2]
                         angles[v2] = atan2(delta[1], delta[0])
         for i in self.real:
             if DRAWING_ALGORITHMS[self.drawing_setting].name == "circular":
@@ -834,19 +742,6 @@ class OWNeighborJoining(widget.OWWidget):
             color.setAlpha(self.alpha_value)
             brush_data = QBrush(color)
 
-        if self._subset_mask is not None:
-            assert self._subset_mask.shape == (len(self.data),)
-            if mask is not None:
-                subset_mask = self._subset_mask[mask]
-            else:
-                subset_mask = self._subset_mask
-
-            if isinstance(brush_data, QBrush):
-                brush_data = np.array([brush_data] * subset_mask.size,
-                                         dtype=object)
-
-            brush_data[~subset_mask] = QBrush(Qt.NoBrush)
-
         if self._selection_mask is not None:
             assert self._selection_mask.shape == (len(self.data),)
             if mask is not None:
@@ -900,7 +795,9 @@ class OWNeighborJoining(widget.OWWidget):
             assert shape_var.is_discrete
             symbols = np.array(list(ScatterPlotItem.Symbols))
             max_symbol = symbols.size - 1
-            shapeidx, shape_mask = column_data(self.data, shape_var, dtype=int)
+            shapeidx, shape_mask = column_data(self.matrix.row_items, shape_var, dtype=int)
+            shapeidx = np.hstack((shapeidx, np.full(self.new.shape, -1)))
+            shape_mask = np.hstack((shape_mask, np.full(self.new.shape, False)))
             shapeidx[shape_mask] = max_symbol
             shapeidx[~shape_mask] %= max_symbol -1
             shape_data = symbols[shapeidx]

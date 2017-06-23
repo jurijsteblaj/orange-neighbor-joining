@@ -608,20 +608,13 @@ class OWNeighborJoining(widget.OWWidget):
         """
         Return the column data and mask for variable `var`
         """
-        X, _ = self.matrix.row_items.get_column_view(var)
         return column_data(self.matrix.row_items, var, dtype)
 
     def _setup_plot(self, reset_view=True):
         self.__replot_requested = False
         self.clear_plot()
 
-        coords = [self.data[:,0], self.data[:,1]]
-        coords = np.vstack(coords)
-
-        mask = ~np.logical_or.reduce(np.isnan(coords), axis=0)
-        coords = coords[:, mask]
-
-        X, Y = coords
+        X, Y = self.data.T
         X -= X.mean()
         Y -= Y.mean()
         maxspan = max(X.max() - X.min(), Y.max() - Y.min())
@@ -630,7 +623,7 @@ class OWNeighborJoining(widget.OWWidget):
 
         pen_data, brush_data = self._color_data()
         size_data = self._size_data()
-        shape_data = self._shape_data(mask)
+        shape_data = self._shape_data()
 
         if self.rooted_tree is not None:
             l = list(chain.from_iterable((ix1, ix2) for ix1 in self.rooted_tree for ix2, _ in self.rooted_tree[ix1]))
@@ -648,9 +641,8 @@ class OWNeighborJoining(widget.OWWidget):
             size=size_data,
             symbol=shape_data,
             antialias=True,
-            data=np.arange(len(self.data))[mask]
+            data=np.arange(len(self.data))
         )
-        self._item._mask = mask
 
         self.viewbox.addItem(self._item)
 
@@ -767,14 +759,14 @@ class OWNeighborJoining(widget.OWWidget):
             self._item.data["pen"] = None
             self._item.setPen(pen)
         else:
-            self._item.setPen(pen[self._item._mask])
+            self._item.setPen(pen)
 
         if isinstance(brush, QBrush):
             # Reset the brush for all points
             self._item.data["brush"] = None
             self._item.setBrush(brush)
         else:
-            self._item.setBrush(brush[self._item._mask])
+            self._item.setBrush(brush)
 
         color_var = self.color_var()
         if color_var is not None and color_var.is_discrete:
@@ -787,7 +779,7 @@ class OWNeighborJoining(widget.OWWidget):
 
         self._update_legend()
 
-    def _shape_data(self, mask):
+    def _shape_data(self, mask=None):
         shape_var = self.shape_var()
         if shape_var is None:
             shape_data = np.array(["o"] * len(self.data))
@@ -901,7 +893,7 @@ class OWNeighborJoining(widget.OWWidget):
         Set (update) the current point shape map.
         """
         if self._item is not None:
-            self._item.setSymbol(shape[self._item._mask])
+            self._item.setSymbol(shape)
 
     def set_size(self, size):
         """
@@ -912,7 +904,7 @@ class OWNeighborJoining(widget.OWWidget):
                 size = np.hstack((size, np.full(len(self.new), self.point_size * self.new_node_size_mult)))
             else:
                 size[self.new] = self.point_size * self.new_node_size_mult
-            self._item.setSize(size[self._item._mask])
+            self._item.setSize(size)
 
     def _set_alpha(self, value):
         self.alpha_value = value

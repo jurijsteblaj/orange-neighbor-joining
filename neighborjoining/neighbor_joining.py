@@ -1,15 +1,12 @@
 from copy import deepcopy
 from itertools import chain
-from math import cos, sin, pi, atan2
+from math import cos, sin, pi
 
 import numpy as np
 from numpy import ma
-from scipy.spatial.distance import pdist
-
-import matplotlib.pyplot as plt
 
 
-def neighbor_joining(d):    
+def run_neighbor_joining(d):
     D = ma.array(d, copy=True)
     D.mask = ma.make_mask_none(D.shape)
     joined_nodes = []
@@ -84,7 +81,7 @@ def neighbor_joining(d):
     return result
 
 
-def children(tree, v):
+def get_children(tree, v):
     """Return a list of indexes of child nodes of a parent node in a tree."""
     if len(tree[v]) == 0:
         return []
@@ -94,51 +91,51 @@ def children(tree, v):
     
 def remove_backlink(t, child, parent):
     try:
-        ix = children(t, child).index(parent)
+        ix = get_children(t, child).index(parent)
         del t[child][ix]
     except ValueError:
         pass
-    for c in children(t, child):
+    for c in get_children(t, child):
         remove_backlink(t, c, child)
 
         
-def rooted(tree, root=0):
+def make_rooted(tree, root=0):
     t = deepcopy(tree)
-    for child in children(t, root):
+    for child in get_children(t, root):
         remove_backlink(t, child, root)
     return t
 
 
-def distance(tree, parent, child):
+def get_distance(tree, parent, child):
     """Return distance between a parent and a child node in a tree."""
-    ix = children(tree, parent).index(child)
+    ix = get_children(tree, parent).index(child)
     return tree[parent][ix][1]
 
 
-def postorder_traversal(tree, v, l):
+def postorder_traverse_radial(tree, v, l):
     if len(tree[v]) == 0:
         l[v] = 1
     else:
         l[v] = 0
-        for w in children(tree, v):
-            postorder_traversal(tree, w, l)
+        for w in get_children(tree, v):
+            postorder_traverse_radial(tree, w, l)
             l[v] += l[w]
 
             
-def preorder_traversal(tree, v, parent, root, x, l, omega, tau):
+def preorder_traverse_radial(tree, v, parent, root, x, l, omega, tau):
     if v != root:
         u = parent
         angle = tau[v] + omega[v]/2
-        x[v] = x[u] + distance(tree, u, v) * np.array((cos(angle), sin(angle)))
+        x[v] = x[u] + get_distance(tree, u, v) * np.array((cos(angle), sin(angle)))
     eta = tau[v]
-    for w in children(tree, v):
+    for w in get_children(tree, v):
         omega[w] = 2*pi * l[w]/l[root]
         tau[w] = eta
         eta += omega[w]
-        preorder_traversal(tree, w, v, root, x, l, omega, tau)
+        preorder_traverse_radial(tree, w, v, root, x, l, omega, tau)
 
         
-def get_points(rooted_tree, root=0):
+def get_points_radial(rooted_tree, root=0):
     """See Algorithm 1: RADIAL-LAYOUT in:
     Bachmaier, Christian, Ulrik Brandes, and Barbara Schlieper.
     "Drawing phylogenetic trees." Algorithms and Computation (2005): 1110-1121.
@@ -148,97 +145,51 @@ def get_points(rooted_tree, root=0):
     omega = {}
     tau = {}
     
-    postorder_traversal(rooted_tree, root, l)
+    postorder_traverse_radial(rooted_tree, root, l)
     
     x[root] = np.array((0, 0))
     omega[root] = 2*pi
     tau[root] = 0
-    preorder_traversal(rooted_tree, root, None, root, x, l, omega, tau)
+    preorder_traverse_radial(rooted_tree, root, None, root, x, l, omega, tau)
     
     return x
 
 
-def plot(tree, points, labels=[], classes=None):
-    for v1 in tree:
-        for v2 in children(tree, v1):
-            plt.plot((points[v1][0], points[v2][0]), (points[v1][1], points[v2][1]), 'k')
-            if v2 < len(labels):
-                delta = points[v2] - points[v1]
-                angle = atan2(delta[1], delta[0])*180/pi
-                angle = (angle + 360) % 360
-                if angle > 90 and angle < 270:
-                    alignment = "right"
-                else:
-                    alignment = "left"
-                if angle < 90:
-                    pass
-                elif angle < 180:
-                    pass
-                elif angle < 270:
-                    pass
-                else:
-                    pass
-                if angle < 45:
-                    va = "center"
-                elif angle < 135:
-                    va = "bottom"
-                elif angle < 225:
-                    va = "center"
-                elif angle < 315:
-                    va = "top"
-                else:
-                    va = "center"
-                
-                if angle > 90 and angle < 270:
-                    rotation = (angle + 180) % 360
-                else:
-                    rotation = angle
-                plt.text(*points[v2], labels[v2], rotation=rotation,
-                         va=va, clip_on=True, ha=alignment)
-    
-    if classes != None:
-        for c in classes:
-            plt.plot([points[x][0] for x in c], [points[x][1] for x in c], ".", ms=3)
-    
-    # plt.savefig("output.svg")
-    plt.show()
-
-
-def deg_r(rooted_tree, v, root):
+def get_degree_rooted(rooted_tree, v, root):
     """Get degree of a node in a rooted tree."""
     if v == root:
-        return len(children(rooted_tree, v))
+        return len(get_children(rooted_tree, v))
     else:
-        return len(children(rooted_tree, v)) + 1
+        return len(get_children(rooted_tree, v)) + 1
 
 
-def postorder_traversal_circular(tree, v, root, i, k, parent, c, d, s):
-    for w in children(tree, v):
-        i = postorder_traversal_circular(tree, w, root, i, k, v, c, d, s)
-    if deg_r(tree, v, root) == 1:
+def postorder_traverse_circular(tree, v, root, i, k, parent, c, d, s):
+    for w in get_children(tree, v):
+        i = postorder_traverse_circular(tree, w, root, i, k, v, c, d, s)
+    if get_degree_rooted(tree, v, root) == 1:
         c[v] = 0
         d[v] = np.array((cos(2 * pi * i / k), sin(2 * pi * i / k)))
         i += 1
     else:
         S = 0
         if parent is None:
-            neighbors = children(tree, v)
+            neighbors = get_children(tree, v)
         else:
-            neighbors = chain([parent], children(tree, v))
+            neighbors = chain([parent], get_children(tree, v))
         for w in neighbors:
             if v == root:
-                s[v, w] = 1 / distance(tree, v, w)
+                s[v, w] = 1 / get_distance(tree, v, w)
                 S += s[v, w]
             elif w == parent:
-                s[w, v] = 1 / (distance(tree, w, v))
+                s[w, v] = 1 / (get_distance(tree, w, v))
                 S += s[w, v]
             else:
-                s[v, w] = 1 / (distance(tree, v, w) * (deg_r(tree, v, root) - 1))
+                s[v, w] = 1 / (get_distance(tree, v, w) * (get_degree_rooted(tree, v, root) - 1))
                 S += s[v, w]
 
         t1 = 0
         t2 = 0
-        for w in children(tree, v):
+        for w in get_children(tree, v):
             t1 += s[v, w] / S * c[w]
             t2 += s[v, w] / S * d[w]
         if v != root:
@@ -247,14 +198,14 @@ def postorder_traversal_circular(tree, v, root, i, k, parent, c, d, s):
     return i
 
 
-def preorder_traversal_circular(tree, v, root, parent, x, c, d):
+def preorder_traverse_circular(tree, v, root, parent, x, c, d):
     if v == root:
         x[v] = d[v]
     else:
         x[v] = c[v] * x[parent] + d[v]
 
-    for w in children(tree, v):
-        preorder_traversal_circular(tree, w, root, v, x, c, d)
+    for w in get_children(tree, v):
+        preorder_traverse_circular(tree, w, root, v, x, c, d)
 
 
 def get_points_circular(rooted_tree, root=0):
@@ -271,10 +222,10 @@ def get_points_circular(rooted_tree, root=0):
     c = {}
     d = {}
     for v in rooted_tree:
-        if deg_r(rooted_tree, v, root) == 1:
+        if get_degree_rooted(rooted_tree, v, root) == 1:
             k += 1
 
-    postorder_traversal_circular(rooted_tree, root, root, i, k, None, c, d, s)
-    preorder_traversal_circular(rooted_tree, root, root, None, x, c, d)
+    postorder_traverse_circular(rooted_tree, root, root, i, k, None, c, d, s)
+    preorder_traverse_circular(rooted_tree, root, root, None, x, c, d)
 
     return x

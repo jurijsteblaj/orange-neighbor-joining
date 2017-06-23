@@ -37,7 +37,7 @@ from Orange.widgets.utils.annotated_data import (
 )
 from Orange.widgets.utils.itemmodels import VariableListModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
-from neighborjoining.neighbor_joining import neighbor_joining, rooted, get_points, get_points_circular, children
+from neighborjoining.neighbor_joining import run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children
 
 
 class ScatterPlotItem(pg.ScatterPlotItem):
@@ -177,7 +177,7 @@ class LegendItem(LegendItem):
 
 Algorithm = namedtuple("Algorithm", ["name", "function"])
 DRAWING_ALGORITHMS = (
-    Algorithm("radial", get_points),
+    Algorithm("radial", get_points_radial),
     Algorithm("circular", get_points_circular)
 )
 
@@ -230,7 +230,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.matrix = None
         self.real = None
         self.new = None
-        self.data = None
+        self.coords = None
         self._selection_mask = None
         self._item = None
         self._density_img = None
@@ -426,7 +426,7 @@ class OWNeighborJoining(widget.OWWidget):
         return QSize(800, 500)
 
     def clear(self):
-        self.data = None
+        self.coords = None
         self._selection_mask = None
 
         self.colorvar_model[:] = []
@@ -483,7 +483,7 @@ class OWNeighborJoining(widget.OWWidget):
         points = DRAWING_ALGORITHMS[self.drawing_setting].function(self.rooted_tree, self.root)
         self.real = np.arange(self.matrix.shape[0])
         self.new = np.arange(self.real[-1] + 1, len(points))
-        self.data = np.array([points[ix] for ix in points])
+        self.coords = np.array([points[ix] for ix in points])
 
     def set_distances(self, matrix):
         self.closeContext()
@@ -493,8 +493,8 @@ class OWNeighborJoining(widget.OWWidget):
         self.matrix = matrix
         if matrix is not None:
             self.root = len(matrix)
-            self.tree = neighbor_joining(matrix)
-            self.rooted_tree = rooted(self.tree, self.root)
+            self.tree = run_neighbor_joining(matrix)
+            self.rooted_tree = make_rooted(self.tree, self.root)
             self.selection_tree = self.rooted_tree
             for l in self.rooted_tree.values():
                 if len(l) >= 2:
@@ -507,7 +507,7 @@ class OWNeighborJoining(widget.OWWidget):
 
             self.calculate_points()
 
-            if self.data is not None and len(self.data):
+            if self.coords is not None and len(self.coords):
                 self._initialize()
                 self.openContext(self.matrix.row_items.domain)
 
@@ -587,7 +587,7 @@ class OWNeighborJoining(widget.OWWidget):
             return None
 
     def _initialize(self):
-        # Initialize the GUI controls from data's domain.
+        # Initialize the GUI controls.
         all_vars = list(self.matrix.row_items.domain.variables)
         cont_vars = [var for var in self.matrix.row_items.domain.variables
                      if var.is_continuous]
@@ -614,7 +614,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.__replot_requested = False
         self.clear_plot()
 
-        X, Y = self.data.T
+        X, Y = self.coords.T
         X -= X.mean()
         Y -= Y.mean()
         maxspan = max(X.max() - X.min(), Y.max() - Y.min())
@@ -641,7 +641,7 @@ class OWNeighborJoining(widget.OWWidget):
             size=size_data,
             symbol=shape_data,
             antialias=True,
-            data=np.arange(len(self.data))
+            data=np.arange(len(self.coords))
         )
 
         self.viewbox.addItem(self._item)
@@ -650,9 +650,9 @@ class OWNeighborJoining(widget.OWWidget):
         if DRAWING_ALGORITHMS[self.drawing_setting].name == "radial":
             angles = np.empty(self.real.shape)
             for v1 in self.rooted_tree:
-                for v2 in children(self.rooted_tree, v1):
+                for v2 in get_children(self.rooted_tree, v1):
                     if v2 < len(self.real):
-                        delta = self.data[v2,:2] - self.data[v1,:2]
+                        delta = self.coords[v2, :2] - self.coords[v1, :2]
                         angles[v2] = atan2(delta[1], delta[0])
         for i in self.real:
             if DRAWING_ALGORITHMS[self.drawing_setting].name == "circular":
@@ -697,7 +697,7 @@ class OWNeighborJoining(widget.OWWidget):
             return label_data[mask]
 
     def _on_label_change(self):
-        if self.data is None:
+        if self.coords is None:
             return
         self.set_label(self._label_data(mask=None))
 
@@ -735,7 +735,7 @@ class OWNeighborJoining(widget.OWWidget):
             brush_data = QBrush(color)
 
         if self._selection_mask is not None:
-            assert self._selection_mask.shape == (len(self.data),)
+            assert self._selection_mask.shape == (len(self.coords),)
             if mask is not None:
                 selection_mask = self._selection_mask[mask]
             else:
@@ -749,7 +749,7 @@ class OWNeighborJoining(widget.OWWidget):
         return pen_data, brush_data
 
     def _on_color_change(self):
-        if self.data is None or self._item is None:
+        if self.coords is None or self._item is None:
             return
 
         pen, brush = self._color_data()
@@ -782,7 +782,7 @@ class OWNeighborJoining(widget.OWWidget):
     def _shape_data(self, mask=None):
         shape_var = self.shape_var()
         if shape_var is None:
-            shape_data = np.array(["o"] * len(self.data))
+            shape_data = np.array(["o"] * len(self.coords))
         else:
             assert shape_var.is_discrete
             symbols = np.array(list(ScatterPlotItem.Symbols))
@@ -799,7 +799,7 @@ class OWNeighborJoining(widget.OWWidget):
             return shape_data[mask]
 
     def _on_shape_change(self):
-        if self.data is None:
+        if self.coords is None:
             return
 
         self.set_shape(self._shape_data(mask=None))
@@ -808,8 +808,8 @@ class OWNeighborJoining(widget.OWWidget):
     def _size_data(self, mask=None):
         size_var = self.size_var()
         if size_var is None:
-            size_data = np.full((len(self.data),), self.point_size,
-                                   dtype=float)
+            size_data = np.full((len(self.coords),), self.point_size,
+                                dtype=float)
         else:
             nan_size = OWNeighborJoining.MinPointSize - 2
             size_data, size_mask = self._get_data(size_var, dtype=float)
@@ -831,7 +831,7 @@ class OWNeighborJoining(widget.OWWidget):
             return size_data[mask]
 
     def _on_size_change(self):
-        if self.data is None:
+        if self.coords is None:
             return
         self.set_size(self._size_data(mask=None))
 
@@ -923,7 +923,7 @@ class OWNeighborJoining(widget.OWWidget):
         def propagate(new_indices, current_root):
             if not new_indices[current_root]:
                 new_indices[current_root] = True
-                for child in children(self.selection_tree, current_root):
+                for child in get_children(self.selection_tree, current_root):
                     propagate(new_indices, child)
 
         for ix in indices:
@@ -943,7 +943,7 @@ class OWNeighborJoining(widget.OWWidget):
         if self.selecting_root:
             if len(indices) > 0:
                 index = indices[0]
-                self.selection_tree = rooted(self.tree, index)
+                self.selection_tree = make_rooted(self.tree, index)
                 self.selecting_root = False
         else:
             if self.select_descendants:
@@ -952,13 +952,13 @@ class OWNeighborJoining(widget.OWWidget):
             self.select_indices(indices, QApplication.keyboardModifiers())
 
     def select_indices(self, indices, modifiers=Qt.NoModifier):
-        if self.data is None:
+        if self.coords is None:
             return
 
         if self._selection_mask is None or \
                 not modifiers & (Qt.ControlModifier | Qt.ShiftModifier |
                                  Qt.AltModifier):
-            self._selection_mask = np.zeros(len(self.data), dtype=bool)
+            self._selection_mask = np.zeros(len(self.coords), dtype=bool)
 
         if modifiers & Qt.AltModifier:
             self._selection_mask[indices] = False
@@ -973,7 +973,7 @@ class OWNeighborJoining(widget.OWWidget):
     def commit(self):
         subset = None
         indices = None
-        if self.data is not None and self._selection_mask is not None:
+        if self.coords is not None and self._selection_mask is not None:
             indices = np.flatnonzero(self._selection_mask[:len(self.matrix.row_items)])
             if len(indices) > 0:
                 subset = self.matrix.row_items[indices]
@@ -988,6 +988,8 @@ class OWNeighborJoining(widget.OWWidget):
     def send_report(self):
         self.report_plot(name="", plot=self.viewbox.getViewBox())
         caption = report.render_items_vert((
+            ("Labels",
+             self.label_index > 0 and self.labelvar_model[self.label_index]),
             ("Colors",
              self.color_index > 0 and self.colorvar_model[self.color_index]),
             ("Shape",

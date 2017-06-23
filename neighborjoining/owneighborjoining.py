@@ -6,7 +6,7 @@ Neighbor joining widget
 from collections import namedtuple
 from functools import reduce
 from itertools import chain
-from math import atan2, pi, cos, sin
+from math import atan2, pi
 from operator import itemgetter
 from types import SimpleNamespace as namespace
 from xml.sax.saxutils import escape
@@ -27,7 +27,7 @@ from AnyQt.QtWidgets import (
     QGraphicsRectItem, QPinchGesture, QApplication
 )
 from Orange.canvas import report
-from Orange.data import Table, Variable, Domain, ContinuousVariable, TimeVariable
+from Orange.data import Table, Variable
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
 from Orange.widgets.utils import classdensity
@@ -37,7 +37,9 @@ from Orange.widgets.utils.annotated_data import (
 )
 from Orange.widgets.utils.itemmodels import VariableListModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
-from neighborjoining.neighbor_joining import run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children
+from neighborjoining.neighbor_joining import (
+    run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor
+)
 
 
 class ScatterPlotItem(pg.ScatterPlotItem):
@@ -496,14 +498,7 @@ class OWNeighborJoining(widget.OWWidget):
             self.tree = run_neighbor_joining(matrix)
             self.rooted_tree = make_rooted(self.tree, self.root)
             self.selection_tree = self.rooted_tree
-            for l in self.rooted_tree.values():
-                if len(l) >= 2:
-                    if l[0][1] < self.min_dist:
-                        l[1][1] += l[0][1] - self.min_dist
-                        l[0][1] = self.min_dist
-                    if l[1][1] < self.min_dist:
-                        l[0][1] += l[1][1] - self.min_dist
-                        l[1][1] = self.min_dist
+            set_distance_floor(self.rooted_tree, self.min_dist)
 
             self.calculate_points()
 

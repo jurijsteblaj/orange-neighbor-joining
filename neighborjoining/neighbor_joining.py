@@ -67,9 +67,7 @@ def run_neighbor_joining(d):
         n = len(D) - len(joined_nodes)
     
     # Join the last two remaining nodes
-    ix = ma.argmax(D)
-    i = ix % len(Q)
-    j = int(ix/len(Q))
+    i, j = np.where(np.logical_not(np.in1d(np.arange(len(D)), joined_nodes)))[0]
     
     if i not in result:
         result[i] = []
@@ -229,3 +227,29 @@ def get_points_circular(rooted_tree, root=0):
     preorder_traverse_circular(rooted_tree, root, root, None, x, c, d)
 
     return x
+
+def set_distance_floor(tree, min_dist):
+    for l in tree.values():
+        if len(l) == 1 and l[0][1] == 0:
+            l[0][1] = min_dist
+        if len(l) == 2:
+            if l[0][1] + l[1][1] == 0:
+                l[0][1] = l[1][1] = min_dist
+            elif l[0][1] + l[1][1] < 2 * min_dist:
+                l[0][1] = l[1][1] = (l[0][1] + l[1][1]) / 2
+            else:
+                for i in range(2):
+                    if l[i][1] < min_dist:
+                        l[(i + 1) % 2][1] += l[i][1] - min_dist
+                        l[i][1] = min_dist
+        if len(l) == 3:
+            if sum(c[1] for c in l) == 0:
+                l[0][1] = l[1][1] = l[2][1] = min_dist
+            elif sum(c[1] for c in l) < 3 * min_dist:
+                l[0][1] = l[1][1] = l[2][1] = sum(l[0][1], l[1][1], l[2][1]) / 3
+            else:
+                for i in range(3):
+                    if l[i][1] < min_dist:
+                        l[(i + 1) % 3][1] += l[i][1] - min_dist
+                        l[i][1] = min_dist
+

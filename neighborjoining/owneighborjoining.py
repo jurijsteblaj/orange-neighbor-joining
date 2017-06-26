@@ -678,7 +678,7 @@ class OWNeighborJoining(widget.OWWidget):
     def _label_data(self, mask=None):
         label_var = self.label_var()
         if label_var is None:
-            label_data = np.full(self.real.shape, "")
+            label_data = np.full(self.real.shape, "", dtype=str)
         else:
             if label_var.is_string:
                 label_data, label_mask = self._get_data(label_var, dtype=str)

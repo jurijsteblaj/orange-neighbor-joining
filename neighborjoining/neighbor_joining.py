@@ -246,7 +246,7 @@ def set_distance_floor(tree, min_dist):
             if sum(c[1] for c in l) == 0:
                 l[0][1] = l[1][1] = l[2][1] = min_dist
             elif sum(c[1] for c in l) < 3 * min_dist:
-                l[0][1] = l[1][1] = l[2][1] = sum(l[0][1], l[1][1], l[2][1]) / 3
+                l[0][1] = l[1][1] = l[2][1] = (l[0][1] + l[1][1] + l[2][1]) / 3
             else:
                 for i in range(3):
                     if l[i][1] < min_dist:

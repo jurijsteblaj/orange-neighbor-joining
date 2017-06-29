@@ -15,15 +15,14 @@ import numpy as np
 import pkg_resources
 import pyqtgraph as pg
 import pyqtgraph.graphicsItems.ScatterPlotItem
-from AnyQt.QtCore import Qt, QObject, QEvent, QSize, QRectF, QLineF, QPointF
+from AnyQt.QtCore import Qt, QObject, QEvent, QSize, QRectF, QPointF
 from AnyQt.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from AnyQt.QtGui import (
-    QColor, QPen, QBrush, QKeySequence, QPainterPath, QPainter, QTransform,
-    QCursor, QIcon
+    QColor, QPen, QBrush, QKeySequence, QPainterPath, QPainter, QCursor, QIcon
 )
 from AnyQt.QtWidgets import (
     QSlider, QToolButton, QFormLayout, QHBoxLayout,
-    QSizePolicy, QAction, QActionGroup, QGraphicsLineItem, QGraphicsPathItem,
+    QSizePolicy, QAction, QActionGroup, QGraphicsPathItem,
     QGraphicsRectItem, QPinchGesture, QApplication
 )
 from Orange.canvas import report
@@ -65,73 +64,6 @@ class TextItem(pg.TextItem):
         def setAnchor(self, anchor):
             self.anchor = pg.Point(anchor)
             self.updateText()
-
-
-class AxisItem(pg.GraphicsObject):
-    def __init__(self, parent=None, line=None, label=None, *args):
-        super().__init__(parent, *args)
-        self.setFlag(pg.GraphicsObject.ItemHasNoContents)
-
-        if line is None:
-            line = QLineF(0, 0, 1, 0)
-
-        self._spine = QGraphicsLineItem(line, self)
-        dx = line.x2() - line.x1()
-        dy = line.y2() - line.y1()
-        rad = np.arctan2(dy, dx)
-        angle = (rad * 180 / np.pi) % 360
-
-        self._arrow = pg.ArrowItem(parent=self, angle=180 - angle)
-        self._arrow.setPos(self._spine.line().p2())
-
-        self._label = TextItem(text=label, color=(10, 10, 10))
-        self._label.setParentItem(self)
-        self._label.setPos(self._spine.line().p2())
-
-    def setLabel(self, label):
-        if label != self._label:
-            self._label = label
-            self._label.setText(label)
-
-    def setPen(self, pen):
-        self._spine.setPen(pen)
-
-    def paint(self, painter, option, widget):
-        pass
-
-    def boundingRect(self):
-        return QRectF()
-
-    def viewTransformChanged(self):
-        self.__updateLabelPos()
-
-    def __updateLabelPos(self):
-        T = self.viewTransform()
-        if T is not None:
-            Tinv, ok = T.inverted()
-        else:
-            Tinv, ok = None, False
-        if not ok:
-            T = Tinv = QTransform()
-
-        # map the axis spine to viewbox coord. system
-        viewbox_line = Tinv.map(self._spine.line())
-        angle = viewbox_line.angle()
-        # note in Qt the y axis is inverted (90 degree angle 'points' down)
-        left_quad = 270 <= angle <= 360 or -0.0 <= angle < 90
-
-        # position the text label along the viewbox_line
-        label_pos = viewbox_line.pointAt(0.90)
-
-        if left_quad:
-            anchor = (0.5, -0.1)
-        else:
-            anchor = (0.5, 1.1)
-
-        pos = T.map(label_pos)
-        self._label.setPos(pos)
-        self._label.setAnchor(pg.Point(*anchor))
-        self._label.setRotation(angle if left_quad else angle - 180)
 
 
 class LegendItem(LegendItem):
@@ -237,7 +169,6 @@ class OWNeighborJoining(widget.OWWidget):
         self._item = None
         self._density_img = None
         self.__legend = None
-        self.__selection_item = None
         self.__replot_requested = False
 
         box = gui.vBox(self.controlArea, box=True)
@@ -529,24 +460,6 @@ class OWNeighborJoining(widget.OWWidget):
             self._setup_plot()
         else:
             super().customEvent(event)
-
-    @staticmethod
-    def _encode_var_state(lists):
-        return {(type(var), var.name): (source_ind, pos)
-                for source_ind, var_list in enumerate(lists)
-                for pos, var in enumerate(var_list)
-                if isinstance(var, Variable)}
-
-    @staticmethod
-    def _decode_var_state(state, lists):
-        all_vars = reduce(list.__iadd__, lists, [])
-
-        newlists = [[] for _ in lists]
-        for var in all_vars:
-            source, pos = state[(type(var), var.name)]
-            newlists[source].append((pos, var))
-        return [[var for _, var in sorted(newlist, key=itemgetter(0))]
-                for newlist in newlists]
 
     def label_var(self):
         if 1 <= self.label_index < len(self.labelvar_model):
@@ -1554,32 +1467,6 @@ class plotutils:
         return (a - mean) / (span or 1)
 
 
-class linproj:
-    @staticmethod
-    def defaultaxes(naxes):
-        """
-        Return the default axes for linear projection.
-        """
-        assert naxes > 0
-
-        if naxes == 1:
-            axes_angle = [0]
-        elif naxes == 2:
-            axes_angle = [0, np.pi / 2]
-        else:
-            axes_angle = np.linspace(0, 2 * np.pi, naxes, endpoint=False)
-
-        axes = np.vstack(
-            (np.cos(axes_angle),
-             np.sin(axes_angle))
-        )
-        return axes
-
-    @staticmethod
-    def project(axes, X):
-        return np.dot(axes, X)
-
-
 def test_main(argv=None):
     import sys
     import sip
@@ -1594,7 +1481,6 @@ def test_main(argv=None):
 
     data = Table(filename)
     matrix = distance.Euclidean(distance._preprocess(data))
-
     app = QApplication([])
     w = OWNeighborJoining()
     w.set_distances(matrix)

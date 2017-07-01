@@ -82,7 +82,7 @@ def run_neighbor_joining(d):
 def get_children(tree, v):
     """Return a list of indexes of child nodes of a parent node in a tree."""
     if len(tree[v]) == 0:
-        return []
+        return ()
     else:
         return list(zip(*tree[v]))[0]
 
@@ -231,23 +231,19 @@ def get_points_circular(rooted_tree, root=0):
 
 def set_distance_floor(tree, min_dist):
     for l in tree.values():
-        if len(l) == 1 and l[0][1] <= 0:
+        if len(l) == 1 and l[0][1] < min_dist:
             l[0][1] = min_dist
         if len(l) == 2:
-            if l[0][1] + l[1][1] <= 0:
+            if l[0][1] + l[1][1] < 2 * min_dist:
                 l[0][1] = l[1][1] = min_dist
-            elif l[0][1] + l[1][1] < 2 * min_dist:
-                l[0][1] = l[1][1] = (l[0][1] + l[1][1]) / 2
             else:
                 for i in range(2):
                     if l[i][1] < min_dist:
                         l[(i + 1) % 2][1] += l[i][1] - min_dist
                         l[i][1] = min_dist
         if len(l) == 3:
-            if sum(c[1] for c in l) <= 0:
+            if sum(c[1] for c in l) < 3 * min_dist:
                 l[0][1] = l[1][1] = l[2][1] = min_dist
-            elif sum(c[1] for c in l) < 3 * min_dist:
-                l[0][1] = l[1][1] = l[2][1] = (l[0][1] + l[1][1] + l[2][1]) / 3
             else:
                 for i in range(3):
                     if l[i][1] < min_dist:

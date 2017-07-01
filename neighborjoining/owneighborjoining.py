@@ -4,10 +4,8 @@ Neighbor joining widget
 
 """
 from collections import namedtuple
-from functools import reduce
 from itertools import chain
 from math import atan2, pi
-from operator import itemgetter
 from types import SimpleNamespace as namespace
 from xml.sax.saxutils import escape
 
@@ -26,7 +24,7 @@ from AnyQt.QtWidgets import (
     QGraphicsRectItem, QPinchGesture, QApplication
 )
 from Orange.canvas import report
-from Orange.data import Table, Variable
+from Orange.data import Table
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
 from Orange.widgets.utils import classdensity
@@ -154,7 +152,7 @@ class OWNeighborJoining(widget.OWWidget):
     def __init__(self):
         super().__init__()
 
-        self.min_dist = 1e-2
+        self.min_dist = 1e3 * np.finfo(float).eps
         self.root = 0
         self.tree = None
         self.rooted_tree = None

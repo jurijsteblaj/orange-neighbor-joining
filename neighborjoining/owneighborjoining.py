@@ -423,8 +423,8 @@ class OWNeighborJoining(widget.OWWidget):
 
         self.matrix = matrix
         if matrix is not None:
-            self.root = len(matrix)
             self.tree = run_neighbor_joining(matrix)
+            self.root = len(self.tree) - 1
             self.rooted_tree = make_rooted(self.tree, self.root)
             self.selection_tree = self.rooted_tree
             set_distance_floor(self.rooted_tree, self.min_dist)

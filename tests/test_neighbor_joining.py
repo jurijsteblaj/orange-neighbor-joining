@@ -1,9 +1,11 @@
 import unittest
+from math import pi
 
 import numpy as np
 
 from neighborjoining.neighbor_joining import (
-    run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor
+    run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor,
+    get_degree_rooted, get_distance, preorder_traverse_radial, postorder_traverse_radial
 )
 from scipy.spatial.distance import squareform
 
@@ -38,6 +40,8 @@ class TestNeighborJoining(unittest.TestCase):
             6: [[2, 4.0], [7, 2.0]],
             7: [[4, 1.0], [3, 2.0]]}
 
+        self.l = {0: 4, 1: 1, 2: 1, 3: 1, 4: 1, 5: 4, 6: 3, 7: 2}
+
         self.points_radial = {
             0: np.array([0, 0]),
             1: np.array([0.12132034, 2.12132034]),
@@ -67,16 +71,37 @@ class TestNeighborJoining(unittest.TestCase):
                 for vva, vvb in zip(va, vb):
                     fun(vva, vvb, kwargs)
 
+    def assertPoints(self, a, b):
+        np.testing.assert_array_almost_equal(np.array(list(a.keys())), np.array(list(b.keys())))
+        np.testing.assert_array_almost_equal(np.array(list(a.values())), np.array(list(b.values())))
+
     def test_run_neighbor_joining(self):
         self.assertDict(self.assertAlmostEqual, run_neighbor_joining(self.matrix), self.tree)
 
     def test_make_rooted(self):
         self.assertAlmostEqual(make_rooted(self.tree, self.root), self.rooted_tree)
 
+    def test_postorder_traverse_radial(self):
+        l = {}
+        postorder_traverse_radial(self.rooted_tree, self.root, l)
+        self.assertEqual(l, self.l)
+        l = {}
+        postorder_traverse_radial({0: [[1,1],[2,1]], 1: [], 2: []}, 0, l)
+        self.assertEqual(l, {0: 2, 1: 1, 2: 1})
+
+    def test_preorder_traverse_radial(self):
+        x = {}
+        omega = {}
+        tau = {}
+        x[self.root] = np.array((0, 0))
+        omega[self.root] = 2 * pi
+        tau[self.root] = 0
+        preorder_traverse_radial(self.rooted_tree, self.root, None, self.root, x, self.l, omega, tau)
+        self.assertPoints(x, self.points_radial)
+
     def test_get_points_radial(self):
         points = get_points_radial(self.rooted_tree, self.root)
-        np.testing.assert_array_almost_equal(np.array(list(points.keys())), np.array(list(self.points_radial.keys())))
-        np.testing.assert_array_almost_equal(np.array(list(points.values())), np.array(list(self.points_radial.values())))
+        self.assertPoints(points, self.points_radial)
 
     def test_get_points_circular(self):
         points = get_points_circular(self.rooted_tree, self.root)
@@ -132,3 +157,17 @@ class TestNeighborJoining(unittest.TestCase):
         self.assertGreater(min_dist, min(y[1] for x in rooted_tree for y in rooted_tree[x]))
         set_distance_floor(rooted_tree, min_dist)
         self.assertLessEqual(min_dist, min(y[1] for x in rooted_tree for y in rooted_tree[x]))
+
+    def test_get_distance(self):
+        self.assertAlmostEqual(get_distance(self.tree, 0, 5), 2.0)
+        self.assertAlmostEqual(get_distance(self.tree, 5, 1), 3.0)
+        self.assertAlmostEqual(get_distance(self.tree, 5, 0), 2.0)
+        self.assertAlmostEqual(get_distance(self.tree, 5, 6), 3.0)
+
+        self.assertAlmostEqual(get_distance(self.rooted_tree, 0, 5), 2.0)
+        self.assertRaises(ValueError, get_distance, self.rooted_tree, 5, 0)
+
+    def test_get_degree_rooted(self):
+        self.assertEqual(get_degree_rooted(self.rooted_tree, 0, self.root), 1)
+        self.assertEqual(get_degree_rooted(self.rooted_tree, 1, self.root), 1)
+        self.assertEqual(get_degree_rooted(self.rooted_tree, 5, self.root), 3)

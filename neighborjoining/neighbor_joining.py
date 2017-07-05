@@ -87,20 +87,20 @@ def get_children(tree, v):
         return list(zip(*tree[v]))[0]
 
     
-def remove_backlink(t, child, parent):
+def remove_backlinks(t, child, parent):
     try:
         ix = get_children(t, child).index(parent)
         del t[child][ix]
     except ValueError:
         pass
     for c in get_children(t, child):
-        remove_backlink(t, c, child)
+        remove_backlinks(t, c, child)
 
         
 def make_rooted(tree, root=0):
     t = deepcopy(tree)
     for child in get_children(t, root):
-        remove_backlink(t, child, root)
+        remove_backlinks(t, child, root)
     return t
 
 

@@ -87,14 +87,14 @@ def get_children(tree, v):
         return list(zip(*tree[v]))[0]
 
     
-def remove_backlinks(t, child, parent):
+def remove_backlinks(tree, child, parent):
     try:
-        ix = get_children(t, child).index(parent)
-        del t[child][ix]
+        ix = get_children(tree, child).index(parent)
+        del tree[child][ix]
     except ValueError:
         pass
-    for c in get_children(t, child):
-        remove_backlinks(t, c, child)
+    for c in get_children(tree, child):
+        remove_backlinks(tree, c, child)
 
         
 def make_rooted(tree, root=0):
@@ -213,17 +213,12 @@ def get_points_circular(rooted_tree, root=0):
 
     It is important to remove negative distances in the tree before running this function.
     """
-    i = 0
-    k = 0
-    s = {}
     x = {}
     c = {}
     d = {}
-    for v in rooted_tree:
-        if get_degree_rooted(rooted_tree, v, root) == 1:
-            k += 1
+    k = sum(1 for v in rooted_tree if get_degree_rooted(rooted_tree, v, root) == 1)
 
-    postorder_traverse_circular(rooted_tree, root, root, i, k, None, c, d, s)
+    postorder_traverse_circular(rooted_tree, root, root, 0, k, None, c, d, {})
     preorder_traverse_circular(rooted_tree, root, root, None, x, c, d)
 
     return x

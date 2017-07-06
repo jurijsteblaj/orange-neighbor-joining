@@ -1,11 +1,13 @@
 import unittest
+from copy import deepcopy
 from math import pi
 
 import numpy as np
 
 from neighborjoining.neighbor_joining import (
     run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor,
-    get_degree_rooted, get_distance, preorder_traverse_radial, postorder_traverse_radial
+    get_degree_rooted, get_distance, postorder_traverse_radial, preorder_traverse_radial, postorder_traverse_circular,
+    preorder_traverse_circular, remove_backlinks
 )
 from scipy.spatial.distance import squareform
 
@@ -17,7 +19,8 @@ class TestNeighborJoining(unittest.TestCase):
             [5, 0, 10, 10, 9],
             [9, 10, 0, 8, 7],
             [9, 10, 8, 0, 3],
-            [8, 9, 7, 3, 0]])
+            [8, 9, 7, 3, 0]
+        ])
         self.root = 0
 
         self.tree = {
@@ -28,7 +31,8 @@ class TestNeighborJoining(unittest.TestCase):
             4: [[7, 1.0]],
             5: [[1, 3.0], [0, 2.0], [6, 3.0]],
             6: [[5, 3.0], [2, 4.0], [7, 2.0]],
-            7: [[4, 1.0], [3, 2.0], [6, 2.0]]}
+            7: [[4, 1.0], [3, 2.0], [6, 2.0]]
+        }
 
         self.rooted_tree = {
             0: [[5, 2.0]],
@@ -38,7 +42,8 @@ class TestNeighborJoining(unittest.TestCase):
             4: [],
             5: [[1, 3.0], [6, 3.0]],
             6: [[2, 4.0], [7, 2.0]],
-            7: [[4, 1.0], [3, 2.0]]}
+            7: [[4, 1.0], [3, 2.0]]
+        }
 
         self.l = {0: 4, 1: 1, 2: 1, 3: 1, 4: 1, 5: 4, 6: 3, 7: 2}
 
@@ -50,7 +55,20 @@ class TestNeighborJoining(unittest.TestCase):
             4: np.array([-4.82842712, -4.82842712]),
             5: np.array([-2.00000000e+00, 2.44929360e-16]),
             6: np.array([-4.12132034, -2.12132034]),
-            7: np.array([-4.12132034, -4.12132034])}
+            7: np.array([-4.12132034, -4.12132034])
+        }
+
+        self.c = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0.6738461538461539, 6: 0.547945205479452, 7: 0.4}
+        self.d = {
+            0: np.array([ 0.30901699, -0.95105652]),
+            1: np.array([ 1.,  0.]),
+            2: np.array([ 0.30901699,  0.95105652]),
+            3: np.array([-0.80901699, -0.58778525]),
+            4: np.array([-0.80901699,  0.58778525]),
+            5: np.array([ 0.19407061,  0.05474634]),
+            6: np.array([-0.135987  ,  0.24373369]),
+            7: np.array([-0.4854102 ,  0.11755705])
+        }
 
         self.points_circular = {
             0: np.array([0.30901699, -0.95105652]),
@@ -63,20 +81,39 @@ class TestNeighborJoining(unittest.TestCase):
             7: np.array([-0.45162954, 0.08658599])
         }
 
-    def assertDict(self, fun, a, b, **kwargs):
-        self.assertEqual(len(a), len(b))
-        for ka, kb in zip(a, b):
-            fun(ka, kb, kwargs)
-            for va, vb in zip(a[ka], b[kb]):
-                for vva, vvb in zip(va, vb):
-                    fun(vva, vvb, kwargs)
-
     def assertPoints(self, a, b):
         np.testing.assert_array_almost_equal(np.array(list(a.keys())), np.array(list(b.keys())))
         np.testing.assert_array_almost_equal(np.array(list(a.values())), np.array(list(b.values())))
 
     def test_run_neighbor_joining(self):
-        self.assertDict(self.assertAlmostEqual, run_neighbor_joining(self.matrix), self.tree)
+        self.assertAlmostEqual(run_neighbor_joining(self.matrix), self.tree)
+
+    def test_remove_backlinks(self):
+        tree = deepcopy(self.tree)
+        remove_backlinks(tree, 2, 6)
+        self.assertAlmostEqual(tree, {
+            0: [[5, 2.0]],
+            1: [[5, 3.0]],
+            2: [],
+            3: [[7, 2.0]],
+            4: [[7, 1.0]],
+            5: [[1, 3.0], [0, 2.0], [6, 3.0]],
+            6: [[5, 3.0], [2, 4.0], [7, 2.0]],
+            7: [[4, 1.0], [3, 2.0], [6, 2.0]]
+        })
+
+        tree = deepcopy(self.tree)
+        remove_backlinks(tree, 6, 5)
+        self.assertAlmostEqual(tree, {
+            0: [[5, 2.0]],
+            1: [[5, 3.0]],
+            2: [],
+            3: [],
+            4: [],
+            5: [[1, 3.0], [0, 2.0], [6, 3.0]],
+            6: [[2, 4.0], [7, 2.0]],
+            7: [[4, 1.0], [3, 2.0]]
+        })
 
     def test_make_rooted(self):
         self.assertAlmostEqual(make_rooted(self.tree, self.root), self.rooted_tree)
@@ -102,6 +139,20 @@ class TestNeighborJoining(unittest.TestCase):
     def test_get_points_radial(self):
         points = get_points_radial(self.rooted_tree, self.root)
         self.assertPoints(points, self.points_radial)
+
+    def test_postorder_traverse_circular(self):
+        c = {}
+        d = {}
+        k = sum(1 for v in self.rooted_tree if get_degree_rooted(self.rooted_tree, v, self.root) == 1)
+
+        postorder_traverse_circular(self.rooted_tree, self.root, self.root, 0, k, None, c, d, {})
+        self.assertAlmostEqual(c, self.c)
+        self.assertPoints(d, self.d)
+
+    def test_preorder_traverse_circular(self):
+        x = {}
+        preorder_traverse_circular(self.rooted_tree, self.root, self.root, None, x, self.c, self.d)
+        self.assertPoints(x, self.points_circular)
 
     def test_get_points_circular(self):
         points = get_points_circular(self.rooted_tree, self.root)

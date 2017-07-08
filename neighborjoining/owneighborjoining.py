@@ -27,7 +27,6 @@ from Orange.canvas import report
 from Orange.data import Table
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
-from Orange.widgets.utils import classdensity
 from Orange.widgets.utils import colorpalette
 from Orange.widgets.utils.annotated_data import (
     create_annotated_table, ANNOTATED_DATA_SIGNAL_NAME
@@ -134,9 +133,7 @@ class OWNeighborJoining(widget.OWWidget):
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
     drawing_setting = settings.Setting(0)
-    select_descendants = settings.Setting(True)
 
-    class_density = settings.Setting(False)
     resolution = 256
 
     auto_commit = settings.Setting(True)
@@ -156,8 +153,6 @@ class OWNeighborJoining(widget.OWWidget):
         self.root = 0
         self.tree = None
         self.rooted_tree = None
-        self.selection_tree = None
-        self.selecting_root = False
 
         self.matrix = None
         self.real = None
@@ -165,7 +160,6 @@ class OWNeighborJoining(widget.OWWidget):
         self.coords = None
         self._selection_mask = None
         self._item = None
-        self._density_img = None
         self.__legend = None
         self.__replot_requested = False
 
@@ -198,12 +192,6 @@ class OWNeighborJoining(widget.OWWidget):
                           contentsLength=10)
         form.addRow("Drawing:", cb)
 
-        descendants_cb = gui.checkBox(box, self, "select_descendants", label=None)
-        form.addRow("Select descendants", descendants_cb)
-
-        button = gui.button(box, self, "Select new root", toggleButton=True, value="selecting_root")
-        form.addRow(button)
-
         cb = gui.comboBox(box, self, "label_index",
                           callback=self._on_label_change,
                           contentsLength=10)
@@ -225,9 +213,6 @@ class OWNeighborJoining(widget.OWWidget):
         alpha_slider.valueChanged.connect(self._set_alpha)
         hbox.layout().addWidget(alpha_slider)
 
-        self.cb_class_density = gui.checkBox(
-            gui.indentedBox(box), self, "class_density",
-            label="Show class density", callback=self._update_density)
         gui.separator(box)
         form.addRow(box)
 
@@ -251,6 +236,8 @@ class OWNeighborJoining(widget.OWWidget):
             tickPosition=QSlider.TicksBelow)
         size_slider.valueChanged.connect(self._set_size)
         form.addRow("", size_slider)
+
+        gui.rubber(self.controlArea)
 
         toolbox = gui.vBox(self.controlArea, "Zoom/Select")
         toollayout = QHBoxLayout()
@@ -377,12 +364,6 @@ class OWNeighborJoining(widget.OWWidget):
             self.viewbox.removeItem(self._item)
             self._item = None
 
-    def clear_density_img(self):
-        if self._density_img is not None:
-            self._density_img.setParentItem(None)
-            self.viewbox.removeItem(self._density_img)
-            self._density_img = None
-
     def clear_legend(self):
         if self.__legend is not None:
             anchor = legend_anchor_pos(self.__legend)
@@ -395,7 +376,6 @@ class OWNeighborJoining(widget.OWWidget):
 
     def clear_plot(self):
         self.clear_item()
-        self.clear_density_img()
         self.clear_legend()
         self.viewbox.clear()
 
@@ -426,7 +406,6 @@ class OWNeighborJoining(widget.OWWidget):
             self.tree = run_neighbor_joining(matrix)
             self.root = len(self.tree) - 1
             self.rooted_tree = make_rooted(self.tree, self.root)
-            self.selection_tree = self.rooted_tree
             set_distance_floor(self.rooted_tree, self.min_dist)
 
             self.calculate_points()
@@ -566,7 +545,13 @@ class OWNeighborJoining(widget.OWWidget):
             elif DRAWING_ALGORITHMS[self.drawing_setting].name == "radial":
                 angle = angles[i]
 
-            item = pg.TextItem("", anchor=(0, 0.5), angle=angle*180/pi)
+            if pi/2 < (angle + 2*pi) % (2*pi) < 3*pi/2:
+                angle = angle + pi
+                anchor = (1, 0.5)
+            else:
+                anchor = (0, 0.5)
+
+            item = pg.TextItem("", anchor=anchor, angle=angle*180/pi)
             item.setPos(X[i], Y[i])
             self.viewbox.addItem(item)
             self._labels.append(item)
@@ -576,15 +561,6 @@ class OWNeighborJoining(widget.OWWidget):
         if reset_view:
             self.viewbox.setRange(QRectF(-1.05, -1.05, 2.1, 2.1))
         self._update_legend()
-
-        color_var = self.color_var()
-        if self.class_density and \
-                color_var is not None and color_var.is_discrete:
-            [min_x, max_x], [min_y, max_y] = self.viewbox.viewRange()
-            rgb_data = [brush.color().getRgb()[:3] for brush in brush_data]
-            self._density_img = classdensity.class_density_image(
-                min_x, max_x, min_y, max_y, self.resolution, X, Y, rgb_data)
-            self.viewbox.addItem(self._density_img)
 
     def _label_data(self, mask=None):
         label_var = self.label_var()
@@ -674,15 +650,6 @@ class OWNeighborJoining(widget.OWWidget):
         else:
             self._item.setBrush(brush)
 
-        color_var = self.color_var()
-        if color_var is not None and color_var.is_discrete:
-            self.cb_class_density.setEnabled(True)
-            if self.class_density:
-                self._setup_plot(reset_view=False)
-        else:
-            self.clear_density_img()
-            self.cb_class_density.setEnabled(False)
-
         self._update_legend()
 
     def _shape_data(self, mask=None):
@@ -740,9 +707,6 @@ class OWNeighborJoining(widget.OWWidget):
         if self.coords is None:
             return
         self.set_size(self._size_data(mask=None))
-
-    def _update_density(self):
-        self._setup_plot(reset_view=False)
 
     def _update_legend(self):
         if self.__legend is None:
@@ -823,20 +787,6 @@ class OWNeighborJoining(widget.OWWidget):
     def _selection_finish(self, path):
         self.select(path)
 
-    def propagate_selection(self, indices):
-        new_indices = np.zeros(len(self.selection_tree), dtype=np.bool)
-
-        def propagate(new_indices, current_root):
-            if not new_indices[current_root]:
-                new_indices[current_root] = True
-                for child in get_children(self.selection_tree, current_root):
-                    propagate(new_indices, child)
-
-        for ix in indices:
-            propagate(new_indices, ix)
-
-        return np.nonzero(new_indices)
-
     def select(self, selectionshape):
         item = self._item
         if item is None:
@@ -844,18 +794,9 @@ class OWNeighborJoining(widget.OWWidget):
 
         indices = [spot.data()
                    for spot in item.points()
-                   if selectionshape.contains(spot.pos())]
+                   if selectionshape.contains(spot.pos()) and spot.data() < self.new[0]]
 
-        if self.selecting_root:
-            if len(indices) > 0:
-                index = indices[0]
-                self.selection_tree = make_rooted(self.tree, index)
-                self.selecting_root = False
-        else:
-            if self.select_descendants:
-                indices = self.propagate_selection(indices)
-
-            self.select_indices(indices, QApplication.keyboardModifiers())
+        self.select_indices(indices, QApplication.keyboardModifiers())
 
     def select_indices(self, indices, modifiers=Qt.NoModifier):
         if self.coords is None:

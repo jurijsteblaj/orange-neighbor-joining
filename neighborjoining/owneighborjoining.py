@@ -133,6 +133,8 @@ class OWNeighborJoining(widget.OWWidget):
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
     drawing_setting = settings.Setting(0)
+    label_only_selected = settings.Setting(0)
+    show_legend = settings.Setting(1)
 
     resolution = 256
 
@@ -158,7 +160,6 @@ class OWNeighborJoining(widget.OWWidget):
         self.real = None
         self.new = None
         self.coords = None
-        self.label_only_selected = False
         self._selection_mask = None
         self._item = None
         self.__legend = None
@@ -238,7 +239,9 @@ class OWNeighborJoining(widget.OWWidget):
         size_slider.valueChanged.connect(self._set_size)
         form.addRow("", size_slider)
 
-        gui.checkBox(self.controlArea, self, "label_only_selected", "Label only selected points", callback=self._on_label_change)
+        gui.checkBox(self.controlArea, self, "show_legend", "Show legend", callback=self._update_legend)
+        gui.checkBox(self.controlArea, self, "label_only_selected", "Label only selected points",
+                     callback=self._on_label_change)
 
         gui.rubber(self.controlArea)
 
@@ -726,7 +729,7 @@ class OWNeighborJoining(widget.OWWidget):
         if color_var is not None and not color_var.is_discrete:
             color_var = None
         assert shape_var is None or shape_var.is_discrete
-        if color_var is None and shape_var is None:
+        if not self.show_legend or color_var is None and shape_var is None:
             legend.setParentItem(None)
             legend.hide()
             return

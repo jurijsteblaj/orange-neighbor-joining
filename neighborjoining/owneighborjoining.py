@@ -158,6 +158,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.real = None
         self.new = None
         self.coords = None
+        self.label_only_selected = False
         self._selection_mask = None
         self._item = None
         self.__legend = None
@@ -236,6 +237,8 @@ class OWNeighborJoining(widget.OWWidget):
             tickPosition=QSlider.TicksBelow)
         size_slider.valueChanged.connect(self._set_size)
         form.addRow("", size_slider)
+
+        gui.checkBox(self.controlArea, self, "label_only_selected", "Label only selected points", callback=self._on_label_change)
 
         gui.rubber(self.controlArea)
 
@@ -551,7 +554,7 @@ class OWNeighborJoining(widget.OWWidget):
             else:
                 anchor = (0, 0.5)
 
-            item = pg.TextItem("", anchor=anchor, angle=angle*180/pi)
+            item = pg.TextItem("", anchor=anchor, angle=angle*180/pi, color=(0, 0, 0))
             item.setPos(X[i], Y[i])
             self.viewbox.addItem(item)
             self._labels.append(item)
@@ -756,7 +759,10 @@ class OWNeighborJoining(widget.OWWidget):
 
     def set_label(self, labels):
         for i in self.real:
-            self._labels[i].setHtml('<span style="font-size: 9px; color: black;">'+labels[i]+'</span>')
+            if not self.label_only_selected or self._selection_mask is not None and self._selection_mask[i]:
+                self._labels[i].setText(labels[i])
+            else:
+                self._labels[i].setText("")
 
     def set_shape(self, shape):
         """
@@ -813,6 +819,9 @@ class OWNeighborJoining(widget.OWWidget):
             self._selection_mask[indices] = ~self._selection_mask[indices]
         else:
             self._selection_mask[indices] = True
+
+        if self.label_only_selected:
+            self._on_label_change()
 
         self._on_color_change()
         self.commit()

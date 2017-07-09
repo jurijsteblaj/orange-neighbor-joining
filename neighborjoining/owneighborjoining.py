@@ -500,11 +500,11 @@ class OWNeighborJoining(widget.OWWidget):
         self.clear_plot()
 
         X, Y = self.coords.T
-        X -= X.mean()
-        Y -= Y.mean()
+        X -= (X.max() + X.min()) / 2
+        Y -= (Y.max() + Y.min()) / 2
         maxspan = max(X.max() - X.min(), Y.max() - Y.min())
-        X /= maxspan
-        Y /= maxspan
+        X *= 2 / maxspan
+        Y *= 2 / maxspan
 
         pen_data, brush_data = self._color_data()
         size_data = self._size_data()

@@ -6,7 +6,7 @@ import numpy as np
 from numpy import ma
 
 
-def run_neighbor_joining(d):
+def run_neighbor_joining(d, progress=None):
     D = ma.array(d, copy=True)
     D.mask = ma.make_mask_none(D.shape)
     joined_nodes = []
@@ -62,9 +62,10 @@ def run_neighbor_joining(d):
 
         D.mask[-1,joined_nodes] = True
         D.mask[joined_nodes,-1] = True
-        
-        
+
         n = len(D) - len(joined_nodes)
+        if progress is not None:
+            progress.advance()
     
     # Join the last two remaining nodes
     i, j = np.where(np.logical_not(np.in1d(np.arange(len(D)), joined_nodes)))[0]

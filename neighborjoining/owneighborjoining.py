@@ -27,10 +27,12 @@ from Orange.canvas import report
 from Orange.data import Table
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
+from Orange.widgets.gui import ProgressBar
 from Orange.widgets.utils import colorpalette
 from Orange.widgets.utils.annotated_data import (
     create_annotated_table, ANNOTATED_DATA_SIGNAL_NAME
 )
+from Orange.widgets.utils.concurrent import ThreadExecutor
 from Orange.widgets.utils.itemmodels import VariableListModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
 from neighborjoining.neighbor_joining import (
@@ -409,7 +411,12 @@ class OWNeighborJoining(widget.OWWidget):
 
         self.matrix = matrix
         if self.matrix is not None:
-            self.tree = run_neighbor_joining(self.matrix)
+            ThreadExecutor().submit(self.first_stage)
+
+    def first_stage(self):
+        if self.matrix is not None:
+            progress = ProgressBar(self, len(self.matrix) - 2)
+            self.tree = run_neighbor_joining(self.matrix, progress)
             self.root = len(self.tree) - 1
             self.rooted_tree = make_rooted(self.tree, self.root)
             set_distance_floor(self.rooted_tree, self.min_dist)
@@ -433,6 +440,7 @@ class OWNeighborJoining(widget.OWWidget):
                     self.size_index, len(self.sizevar_model) - 1)
 
                 self._invalidate_plot()
+            progress.finish()
 
     def handleNewSignals(self):
         self.commit()

@@ -408,8 +408,8 @@ class OWNeighborJoining(widget.OWWidget):
         self.information()
 
         self.matrix = matrix
-        if matrix is not None:
-            self.tree = run_neighbor_joining(matrix)
+        if self.matrix is not None:
+            self.tree = run_neighbor_joining(self.matrix)
             self.root = len(self.tree) - 1
             self.rooted_tree = make_rooted(self.tree, self.root)
             set_distance_floor(self.rooted_tree, self.min_dist)
@@ -538,6 +538,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.viewbox.addItem(self._item)
 
         self._labels = []
+        offset = 0.30
         if DRAWING_ALGORITHMS[self.drawing_setting].name == "radial":
             angles = np.empty(self.real.shape)
             for v1 in self.rooted_tree:
@@ -553,9 +554,9 @@ class OWNeighborJoining(widget.OWWidget):
 
             if pi/2 < (angle + 2*pi) % (2*pi) < 3*pi/2:
                 angle = angle + pi
-                anchor = (1, 0.5)
+                anchor = (1+offset, 0.5)
             else:
-                anchor = (0, 0.5)
+                anchor = (-offset, 0.5)
 
             item = pg.TextItem("", anchor=anchor, angle=angle*180/pi, color=(0, 0, 0))
             item.setPos(X[i], Y[i])

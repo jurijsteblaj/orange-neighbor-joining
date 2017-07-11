@@ -23,8 +23,9 @@ from AnyQt.QtWidgets import (
     QSizePolicy, QAction, QActionGroup, QGraphicsPathItem,
     QGraphicsRectItem, QPinchGesture, QApplication
 )
+import Orange
 from Orange.canvas import report
-from Orange.data import Table
+from Orange.data import Table, DiscreteVariable, ContinuousVariable
 from Orange.misc import DistMatrix
 from Orange.widgets import widget, gui, settings
 from Orange.widgets.gui import ProgressBar
@@ -33,7 +34,7 @@ from Orange.widgets.utils.annotated_data import (
     create_annotated_table, ANNOTATED_DATA_SIGNAL_NAME
 )
 from Orange.widgets.utils.concurrent import ThreadExecutor
-from Orange.widgets.utils.itemmodels import VariableListModel
+from Orange.widgets.utils.itemmodels import VariableListModel, DomainModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
 from neighborjoining.neighbor_joining import (
     run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor
@@ -127,10 +128,10 @@ class OWNeighborJoining(widget.OWWidget):
 
     settingsHandler = settings.DomainContextHandler()
 
-    label_index = settings.ContextSetting(0)
-    color_index = settings.ContextSetting(0)
-    shape_index = settings.ContextSetting(0)
-    size_index = settings.ContextSetting(0)
+    attr_label = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_color = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_shape = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_size = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
 
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
@@ -170,10 +171,10 @@ class OWNeighborJoining(widget.OWWidget):
         box = gui.vBox(self.controlArea, box=True)
         box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
 
-        self.labelvar_model = VariableListModel(parent=self, enable_dnd=True)
-        self.colorvar_model = VariableListModel(parent=self, enable_dnd=True)
-        self.shapevar_model = VariableListModel(parent=self, enable_dnd=True)
-        self.sizevar_model = VariableListModel(parent=self, enable_dnd=True)
+        self.label_model = DomainModel(placeholder="(No labels)")
+        self.color_model = DomainModel(placeholder="(Same color)", valid_types=DomainModel.PRIMITIVE)
+        self.shape_model = DomainModel(placeholder="(Same shape)", valid_types=DiscreteVariable)
+        self.size_model = DomainModel(placeholder="(Same size)", valid_types=ContinuousVariable)
 
         form = QFormLayout(
             formAlignment=Qt.AlignLeft,
@@ -196,16 +197,19 @@ class OWNeighborJoining(widget.OWWidget):
                           contentsLength=10)
         form.addRow("Drawing:", cb)
 
+        common_options = dict(
+            labelWidth=50, orientation=Qt.Horizontal, sendSelectedValue=True,
+            valueType=str)
         cb = gui.comboBox(box, self, "label_index",
                           callback=self._on_label_change,
-                          contentsLength=10)
-        cb.setModel(self.labelvar_model)
+                          model=self.label_model,
+                          **common_options)
         form.addRow("Labels:", cb)
 
         cb = gui.comboBox(box, self, "color_index",
                           callback=self._on_color_change,
-                          contentsLength=10)
-        cb.setModel(self.colorvar_model)
+                          model=self.color_model,
+                          **common_options)
         form.addRow("Color:", cb)
 
         box = gui.vBox(None)
@@ -222,16 +226,14 @@ class OWNeighborJoining(widget.OWWidget):
 
         cb = gui.comboBox(box, self, "shape_index",
                           callback=self._on_shape_change,
-                          contentsLength=10)
-
-        cb.setModel(self.shapevar_model)
+                          model=self.shape_model,
+                          **common_options)
         form.addRow("Shape:", cb)
 
         cb = gui.comboBox(box, self, "size_index",
                           callback=self._on_size_change,
-                          contentsLength=10)
-
-        cb.setModel(self.sizevar_model)
+                          model=self.size_model,
+                          **common_options)
         form.addRow("Size:", cb)
 
         size_slider = QSlider(
@@ -355,14 +357,10 @@ class OWNeighborJoining(widget.OWWidget):
         self.coords = None
         self._selection_mask = None
 
-        self.colorvar_model[:] = []
-        self.sizevar_model[:] = []
-        self.shapevar_model[:] = []
-
-        self.label_index = 0
-        self.color_index = 0
-        self.size_index = 0
-        self.shape_index = 0
+        self.attr_label = None
+        self.attr_color = None
+        self.attr_size = None
+        self.attr_shape = None
 
         self.clear_plot()
 
@@ -430,14 +428,22 @@ class OWNeighborJoining(widget.OWWidget):
                 def clip_index(value, maxv):
                     return max(0, min(value, maxv))
 
-                self.label_index = clip_index(
-                    self.label_index, len(self.labelvar_model) - 1)
-                self.color_index = clip_index(
-                    self.color_index, len(self.colorvar_model) - 1)
-                self.shape_index = clip_index(
-                    self.shape_index, len(self.shapevar_model) - 1)
-                self.size_index = clip_index(
-                    self.size_index, len(self.sizevar_model) - 1)
+                def findvar(name, iterable):
+                    """Find a Orange.data.Variable in `iterable` by name"""
+                    for el in iterable:
+                        if isinstance(el, Orange.data.Variable) and el.name == name:
+                            return el
+                    else:
+                        return None
+
+                if isinstance(self.attr_label, str):
+                    self.attr_label = findvar(self.attr_label, self.label_model)
+                if isinstance(self.attr_color, str):
+                    self.attr_color = findvar(self.attr_color, self.color_model)
+                if isinstance(self.attr_shape, str):
+                    self.attr_shape = findvar(self.attr_shape, self.shape_model)
+                if isinstance(self.attr_size, str):
+                    self.attr_size = findvar(self.attr_size, self.size_model)
 
                 self._invalidate_plot()
             progress.finish()
@@ -452,56 +458,18 @@ class OWNeighborJoining(widget.OWWidget):
         else:
             super().customEvent(event)
 
-    def label_var(self):
-        if 1 <= self.label_index < len(self.labelvar_model):
-            return self.labelvar_model[self.label_index]
-        else:
-            return None
-
-    def color_var(self):
-        """
-        Current selected color variable or None (if not selected).
-        """
-        if 1 <= self.color_index < len(self.colorvar_model):
-            return self.colorvar_model[self.color_index]
-        else:
-            return None
-
-    def size_var(self):
-        """
-        Current selected size variable or None (if not selected).
-        """
-        if 1 <= self.size_index < len(self.sizevar_model):
-            return self.sizevar_model[self.size_index]
-        else:
-            return None
-
-    def shape_var(self):
-        """
-        Current selected shape variable or None (if not selected).
-        """
-        if 1 <= self.shape_index < len(self.shapevar_model):
-            return self.shapevar_model[self.shape_index]
-        else:
-            return None
-
     def _initialize(self):
         # Initialize the GUI controls.
-        all_vars = list(self.matrix.row_items.domain.variables)
-        cont_vars = [var for var in self.matrix.row_items.domain.variables
-                     if var.is_continuous]
-        disc_vars = [var for var in self.matrix.row_items.domain.variables
-                     if var.is_discrete]
-        shape_vars = [var for var in disc_vars
-                      if len(var.values) <= len(ScatterPlotItem.Symbols) - 1]
+        domain = self.matrix.row_items and self.matrix.row_items.domain
+        self.label_model.set_domain(domain)
+        self.color_model.set_domain(domain)
+        self.size_model.set_domain(domain)
+        self.shape_model.set_domain(domain)
 
-        self.labelvar_model[:] = ["No labels"] + all_vars + list(self.matrix.row_items.domain.metas)
-        self.colorvar_model[:] = ["Same color"] + all_vars
-        self.sizevar_model[:] = ["Same size"] + cont_vars
-        self.shapevar_model[:] = ["Same shape"] + shape_vars
-
-        if self.matrix.row_items.domain.has_discrete_class:
-            self.color_index = all_vars.index(self.matrix.row_items.domain.class_var) + 1
+        self.attr_label = None
+        self.attr_color = domain and self.matrix.row_items.domain.class_var or None
+        self.attr_size = None
+        self.attr_shape = None
 
     def _get_data(self, var, dtype):
         """
@@ -578,7 +546,7 @@ class OWNeighborJoining(widget.OWWidget):
         self._update_legend()
 
     def _label_data(self, mask=None):
-        label_var = self.label_var()
+        label_var = self.attr_label
         if label_var is None:
             label_data = np.full(self.real.shape, "", dtype=str)
         else:
@@ -599,7 +567,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.set_label(self._label_data(mask=None))
 
     def _color_data(self, mask=None):
-        color_var = self.color_var()
+        color_var = self.attr_color
         if color_var is not None:
             color_data, _ = self._get_data(color_var, dtype=float)
             if color_var.is_continuous:
@@ -668,7 +636,7 @@ class OWNeighborJoining(widget.OWWidget):
         self._update_legend()
 
     def _shape_data(self, mask=None):
-        shape_var = self.shape_var()
+        shape_var = self.attr_shape
         if shape_var is None:
             shape_data = np.array(["o"] * len(self.coords))
         else:
@@ -694,7 +662,7 @@ class OWNeighborJoining(widget.OWWidget):
         self._update_legend()
 
     def _size_data(self, mask=None):
-        size_var = self.size_var()
+        size_var = self.attr_size
         if size_var is None:
             size_data = np.full((len(self.coords),), self.point_size,
                                 dtype=float)
@@ -734,7 +702,7 @@ class OWNeighborJoining(widget.OWWidget):
 
         legend.clear()
 
-        color_var, shape_var = self.color_var(), self.shape_var()
+        color_var, shape_var = self.attr_color, self.attr_shape
         if color_var is not None and not color_var.is_discrete:
             color_var = None
         assert shape_var is None or shape_var.is_discrete
@@ -855,15 +823,13 @@ class OWNeighborJoining(widget.OWWidget):
 
     def send_report(self):
         self.report_plot(name="", plot=self.viewbox.getViewBox())
+        def name(var):
+            return var and var.name
         caption = report.render_items_vert((
-            ("Labels",
-             self.label_index > 0 and self.labelvar_model[self.label_index]),
-            ("Colors",
-             self.color_index > 0 and self.colorvar_model[self.color_index]),
-            ("Shape",
-             self.shape_index > 0 and self.shapevar_model[self.shape_index]),
-            ("Size",
-             self.size_index > 0 and self.sizevar_model[self.size_index])
+            ("Labels", name(self.attr_label)),
+            ("Colors", name(self.attr_color)),
+            ("Shape", name(self.attr_shape)),
+            ("Size", name(self.attr_size))
         ))
         self.report_caption(caption)
 

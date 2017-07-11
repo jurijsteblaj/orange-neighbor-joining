@@ -200,13 +200,13 @@ class OWNeighborJoining(widget.OWWidget):
         common_options = dict(
             labelWidth=50, orientation=Qt.Horizontal, sendSelectedValue=True,
             valueType=str)
-        cb = gui.comboBox(box, self, "label_index",
+        cb = gui.comboBox(box, self, "attr_label",
                           callback=self._on_label_change,
                           model=self.label_model,
                           **common_options)
         form.addRow("Labels:", cb)
 
-        cb = gui.comboBox(box, self, "color_index",
+        cb = gui.comboBox(box, self, "attr_color",
                           callback=self._on_color_change,
                           model=self.color_model,
                           **common_options)
@@ -224,13 +224,13 @@ class OWNeighborJoining(widget.OWWidget):
         gui.separator(box)
         form.addRow(box)
 
-        cb = gui.comboBox(box, self, "shape_index",
+        cb = gui.comboBox(box, self, "attr_shape",
                           callback=self._on_shape_change,
                           model=self.shape_model,
                           **common_options)
         form.addRow("Shape:", cb)
 
-        cb = gui.comboBox(box, self, "size_index",
+        cb = gui.comboBox(box, self, "attr_size",
                           callback=self._on_size_change,
                           model=self.size_model,
                           **common_options)
@@ -424,9 +424,6 @@ class OWNeighborJoining(widget.OWWidget):
             if self.coords is not None and len(self.coords):
                 self._initialize()
                 self.openContext(self.matrix.row_items.domain)
-
-                def clip_index(value, maxv):
-                    return max(0, min(value, maxv))
 
                 def findvar(name, iterable):
                     """Find a Orange.data.Variable in `iterable` by name"""

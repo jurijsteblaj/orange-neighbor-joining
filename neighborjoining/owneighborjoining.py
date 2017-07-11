@@ -168,13 +168,53 @@ class OWNeighborJoining(widget.OWWidget):
         self.__legend = None
         self.__replot_requested = False
 
-        box = gui.vBox(self.controlArea, box=True)
+        box = gui.vBox(self.controlArea, "Drawing")
         box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
 
         self.label_model = DomainModel(placeholder="(No labels)")
         self.color_model = DomainModel(placeholder="(Same color)", valid_types=DomainModel.PRIMITIVE)
         self.shape_model = DomainModel(placeholder="(Same shape)", valid_types=DiscreteVariable)
         self.size_model = DomainModel(placeholder="(Same size)", valid_types=ContinuousVariable)
+
+        common_options = dict(
+            labelWidth=55, orientation=Qt.Horizontal, sendSelectedValue=True,
+            valueType=str)
+
+        def on_drawing_change():
+            if self.matrix is None:
+                return
+            self.calculate_points()
+            self._setup_plot()
+
+        gui.comboBox(box, self, "drawing_setting",
+                     callback=on_drawing_change,
+                     items=tuple(alg.name for alg in DRAWING_ALGORITHMS),
+                     label="Drawing:",
+                     labelWidth=55,
+                     orientation=Qt.Horizontal)
+
+        box = gui.vBox(self.controlArea, "Points")
+
+        gui.comboBox(box, self, "attr_label",
+                     callback=self._on_label_change,
+                     model=self.label_model,
+                     label="Labels:",
+                     **common_options)
+        gui.comboBox(box, self, "attr_color",
+                     callback=self._on_color_change,
+                     model=self.color_model,
+                     label="Color:",
+                     **common_options)
+        gui.comboBox(box, self, "attr_shape",
+                     callback=self._on_shape_change,
+                     model=self.shape_model,
+                     label="Shape:",
+                     **common_options)
+        gui.comboBox(box, self, "attr_size",
+                     callback=self._on_size_change,
+                     model=self.size_model,
+                     label="Size:",
+                     **common_options)
 
         form = QFormLayout(
             formAlignment=Qt.AlignLeft,
@@ -184,74 +224,29 @@ class OWNeighborJoining(widget.OWWidget):
         )
         box.layout().addLayout(form)
 
-        def on_drawing_change():
-            if self.matrix is None:
-                return
-
-            self.calculate_points()
-            self._setup_plot()
-
-        cb = gui.comboBox(box, self, "drawing_setting",
-                          callback=on_drawing_change,
-                          items=tuple(alg.name for alg in DRAWING_ALGORITHMS),
-                          contentsLength=10)
-        form.addRow("Drawing:", cb)
-
-        common_options = dict(
-            labelWidth=50, orientation=Qt.Horizontal, sendSelectedValue=True,
-            valueType=str)
-        cb = gui.comboBox(box, self, "attr_label",
-                          callback=self._on_label_change,
-                          model=self.label_model,
-                          **common_options)
-        form.addRow("Labels:", cb)
-
-        cb = gui.comboBox(box, self, "attr_color",
-                          callback=self._on_color_change,
-                          model=self.color_model,
-                          **common_options)
-        form.addRow("Color:", cb)
-
-        box = gui.vBox(None)
-        hbox = gui.indentedBox(box, orientation=Qt.Horizontal)
-        gui.widgetLabel(hbox, "Opacity: ")
-        alpha_slider = QSlider(
-            Qt.Horizontal, minimum=10, maximum=255, pageStep=25,
-            tickPosition=QSlider.TicksBelow, value=self.alpha_value)
-        alpha_slider.valueChanged.connect(self._set_alpha)
-        hbox.layout().addWidget(alpha_slider)
-
-        gui.separator(box)
-        form.addRow(box)
-
-        cb = gui.comboBox(box, self, "attr_shape",
-                          callback=self._on_shape_change,
-                          model=self.shape_model,
-                          **common_options)
-        form.addRow("Shape:", cb)
-
-        cb = gui.comboBox(box, self, "attr_size",
-                          callback=self._on_size_change,
-                          model=self.size_model,
-                          **common_options)
-        form.addRow("Size:", cb)
-
         size_slider = QSlider(
             Qt.Horizontal, minimum=3, maximum=30, value=self.point_size,
             pageStep=3,
             tickPosition=QSlider.TicksBelow)
         size_slider.valueChanged.connect(self._set_size)
-        form.addRow("", size_slider)
+        form.addRow("Symbol size:", size_slider)
 
-        gui.checkBox(self.controlArea, self, "show_legend", "Show legend", callback=self._update_legend)
-        gui.checkBox(self.controlArea, self, "label_only_selected", "Label only selected points",
-                     callback=self._on_label_change)
+        alpha_slider = QSlider(
+            Qt.Horizontal, minimum=10, maximum=255, pageStep=25,
+            tickPosition=QSlider.TicksBelow, value=self.alpha_value)
+        alpha_slider.valueChanged.connect(self._set_alpha)
+        form.addRow("Opacity:", alpha_slider)
 
-        gui.rubber(self.controlArea)
+        box = gui.vBox(self.controlArea, "Plot Properties")
+
+        gui.checkBox(box, self, "show_legend", "Show legend", callback=self._update_legend)
+        gui.checkBox(box, self, "label_only_selected", "Label only selected points", callback=self._on_label_change)
 
         toolbox = gui.vBox(self.controlArea, "Zoom/Select")
         toollayout = QHBoxLayout()
         toolbox.layout().addLayout(toollayout)
+
+        gui.rubber(self.controlArea)
 
         gui.auto_commit(self.controlArea, self, "auto_commit", "Send Selection",
                         auto_label="Send Automatically")

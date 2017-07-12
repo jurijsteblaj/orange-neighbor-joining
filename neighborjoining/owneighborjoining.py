@@ -195,15 +195,15 @@ class OWNeighborJoining(widget.OWWidget):
 
         box = gui.vBox(self.controlArea, "Points")
 
-        gui.comboBox(box, self, "attr_label",
-                     callback=self._on_label_change,
-                     model=self.label_model,
-                     label="Labels:",
-                     **common_options)
         gui.comboBox(box, self, "attr_color",
                      callback=self._on_color_change,
                      model=self.color_model,
                      label="Color:",
+                     **common_options)
+        gui.comboBox(box, self, "attr_label",
+                     callback=self._on_label_change,
+                     model=self.label_model,
+                     label="Label:",
                      **common_options)
         gui.comboBox(box, self, "attr_shape",
                      callback=self._on_shape_change,
@@ -818,8 +818,8 @@ class OWNeighborJoining(widget.OWWidget):
         def name(var):
             return var and var.name
         caption = report.render_items_vert((
-            ("Labels", name(self.attr_label)),
-            ("Colors", name(self.attr_color)),
+            ("Color", name(self.attr_color)),
+            ("Label", name(self.attr_label)),
             ("Shape", name(self.attr_shape)),
             ("Size", name(self.attr_size))
         ))

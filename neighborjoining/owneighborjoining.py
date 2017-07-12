@@ -9,6 +9,7 @@ from math import atan2, pi
 from types import SimpleNamespace as namespace
 from xml.sax.saxutils import escape
 
+import Orange
 import numpy as np
 import pkg_resources
 import pyqtgraph as pg
@@ -23,7 +24,6 @@ from AnyQt.QtWidgets import (
     QSizePolicy, QAction, QActionGroup, QGraphicsPathItem,
     QGraphicsRectItem, QPinchGesture, QApplication
 )
-import Orange
 from Orange.canvas import report
 from Orange.data import Table, DiscreteVariable, ContinuousVariable
 from Orange.misc import DistMatrix
@@ -34,7 +34,7 @@ from Orange.widgets.utils.annotated_data import (
     create_annotated_table, ANNOTATED_DATA_SIGNAL_NAME
 )
 from Orange.widgets.utils.concurrent import ThreadExecutor
-from Orange.widgets.utils.itemmodels import VariableListModel, DomainModel
+from Orange.widgets.utils.itemmodels import DomainModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
 from neighborjoining.neighbor_joining import (
     run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor
@@ -602,7 +602,7 @@ class OWNeighborJoining(widget.OWWidget):
                 pen_data = np.array([pen_data] * selection_mask.size,
                                        dtype=object)
 
-            pen_data[selection_mask] = pg.mkPen((200, 200, 0, 150), width=4)
+            pen_data[selection_mask] = pg.mkPen((255, 190, 0, 255), width=4)
         return pen_data, brush_data
 
     def _on_color_change(self):

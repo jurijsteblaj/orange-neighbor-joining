@@ -395,7 +395,7 @@ class OWNeighborJoining(widget.OWWidget):
         points = DRAWING_ALGORITHMS[self.drawing_setting].function(self.rooted_tree, self.root)
         self.real = np.arange(self.matrix.shape[0])
         self.new = np.arange(self.real[-1] + 1, len(points))
-        self.coords = np.array([points[ix] for ix in points])
+        self.coords = np.array([points[ix] for ix in sorted(points.keys())])
 
     def set_distances(self, matrix):
         self.closeContext()

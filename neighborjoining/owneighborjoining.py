@@ -732,7 +732,16 @@ class OWNeighborJoining(widget.OWWidget):
     def set_label(self, labels):
         for i in self.real:
             if not self.label_only_selected or self._selection_mask is not None and self._selection_mask[i]:
-                self._labels[i].setText(labels[i])
+                item = self._labels[i]
+                item.setText(labels[i])
+
+                offset = 10 / item.boundingRect().width()
+                if item.anchor[0] > 0:
+                    anchor = (1 + offset, 0.5)
+                else:
+                    anchor = (-offset, 0.5)
+                item.setAnchor(anchor)
+
             else:
                 self._labels[i].setText("")
 

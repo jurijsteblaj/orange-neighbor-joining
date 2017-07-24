@@ -682,6 +682,7 @@ class OWNeighborJoining(widget.OWWidget):
         if self.coords is None:
             return
         self.set_size(self._size_data(mask=None))
+        self.update_label_offset()
 
     def _update_legend(self):
         if self.__legend is None:
@@ -729,21 +730,25 @@ class OWNeighborJoining(widget.OWWidget):
                 escape(name)
             )
 
+    def update_label_offset(self):
+        size_data = self._size_data()
+        for i in self.real:
+            item = self._labels[i]
+            offset = size_data[i]/2 + 0
+            if item.anchor[0] > 0:
+                anchor = (1 + offset/item.boundingRect().width(), 0.5)
+            else:
+                anchor = (-offset/item.boundingRect().width(), 0.5)
+            item.setAnchor(anchor)
+
     def set_label(self, labels):
         for i in self.real:
             if not self.label_only_selected or self._selection_mask is not None and self._selection_mask[i]:
-                item = self._labels[i]
-                item.setText(labels[i])
-
-                offset = 10 / item.boundingRect().width()
-                if item.anchor[0] > 0:
-                    anchor = (1 + offset, 0.5)
-                else:
-                    anchor = (-offset, 0.5)
-                item.setAnchor(anchor)
-
+                self._labels[i].setText(labels[i])
             else:
                 self._labels[i].setText("")
+
+        self.update_label_offset()
 
     def set_shape(self, shape):
         """

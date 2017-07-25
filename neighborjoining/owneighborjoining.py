@@ -283,8 +283,7 @@ class OWNeighborJoining(widget.OWWidget):
             zoomtofit=QAction(
                 "Zoom to fit", self, icon=icon("zoom_reset"),
                 shortcut=QKeySequence(Qt.ControlModifier | Qt.Key_0),
-                triggered=lambda:
-                    self.viewbox.setRange(QRectF(-1.05, -1.05, 2.1, 2.1))),
+                triggered=lambda: self.reset_view()),
             zoomin=QAction(
                 "Zoom in", self,
                 shortcut=QKeySequence(QKeySequence.ZoomIn),
@@ -469,6 +468,12 @@ class OWNeighborJoining(widget.OWWidget):
         """
         return column_data(self.matrix.row_items, var, dtype)
 
+    def reset_view(self):
+        self.viewbox.setRange(QRectF(-1, -1, 2, 2))
+        if not self.label_only_selected:
+            additional = max(item.boundingRect().width() for item in self._labels)*max(self.viewbox.viewPixelSize())#/500
+            self.viewbox.setRange(QRectF(-1-additional, -1-additional, 2+2*additional, 2+2*additional))
+
     def _setup_plot(self, reset_view=True):
         self.__replot_requested = False
         self.clear_plot()
@@ -506,7 +511,6 @@ class OWNeighborJoining(widget.OWWidget):
         self.viewbox.addItem(self._item)
 
         self._labels = []
-        offset = 0.30
         if DRAWING_ALGORITHMS[self.drawing_setting].name == "radial":
             angles = np.empty(self.real.shape)
             for v1 in self.rooted_tree:
@@ -522,9 +526,9 @@ class OWNeighborJoining(widget.OWWidget):
 
             if pi/2 < (angle + 2*pi) % (2*pi) < 3*pi/2:
                 angle = angle + pi
-                anchor = (1+offset, 0.5)
+                anchor = (1, 0.5)
             else:
-                anchor = (-offset, 0.5)
+                anchor = (0, 0.5)
 
             item = pg.TextItem("", anchor=anchor, angle=angle*180/pi, color=(0, 0, 0))
             item.setPos(X[i], Y[i])
@@ -534,7 +538,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.set_label(self._label_data(mask=None))
 
         if reset_view:
-            self.viewbox.setRange(QRectF(-1.05, -1.05, 2.1, 2.1))
+            self.reset_view()
         self._update_legend()
 
     def _label_data(self, mask=None):
@@ -557,6 +561,10 @@ class OWNeighborJoining(widget.OWWidget):
         if self.coords is None:
             return
         self.set_label(self._label_data(mask=None))
+
+        vr = self.viewbox.viewRange()
+        if not self.label_only_selected and vr[0][0] == -vr[0][1] and vr[1][0] == -vr[1][1]:
+            self.reset_view()
 
     def _color_data(self, mask=None):
         color_var = self.attr_color
@@ -734,7 +742,7 @@ class OWNeighborJoining(widget.OWWidget):
         size_data = self._size_data()
         for i in self.real:
             item = self._labels[i]
-            offset = size_data[i]/2 + 0
+            offset = size_data[i]/2
             if item.anchor[0] > 0:
                 anchor = (1 + offset/item.boundingRect().width(), 0.5)
             else:

@@ -389,6 +389,10 @@ class OWNeighborJoining(widget.OWWidget):
                                    Qt.LowEventPriority - 10)
 
     def calculate_points(self):
+        """
+        Calculate point coordinates and store them in self.coords. Uses distance matrix
+        stored in self.matrix. The coordinates are stored in a 2D numpy array.
+        """
         if self.matrix is None:
             return
         points = DRAWING_ALGORITHMS[self.drawing_setting].function(self.rooted_tree, self.root)
@@ -739,6 +743,7 @@ class OWNeighborJoining(widget.OWWidget):
             )
 
     def update_label_offset(self):
+        """Update offsets of labels form points."""
         size_data = self._size_data()
         for i in self.real:
             item = self._labels[i]

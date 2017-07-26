@@ -7,6 +7,14 @@ from numpy import ma
 
 
 def run_neighbor_joining(d, progress=None):
+    """
+    Run the neighbor joining algorithm on the distance matrix d and return a tree.
+    The tree is structured as {index1: [[index2, distance12], ...], ...}.
+
+    :param d:
+    :param progress:
+    :return tree:
+    """
     D = ma.array(d, copy=True)
     D.mask = ma.make_mask_none(D.shape)
     joined_nodes = []
@@ -80,12 +88,18 @@ def run_neighbor_joining(d, progress=None):
     return result
 
 
-def get_children(tree, v):
-    """Return a list of indexes of child nodes of a parent node in a tree."""
-    if len(tree[v]) == 0:
+def get_children(tree, index):
+    """
+    Return a list of indexes of child nodes of a parent node in a tree.
+
+    :param tree:
+    :param index:
+    :return children:
+    """
+    if len(tree[index]) == 0:
         return ()
     else:
-        return list(zip(*tree[v]))[0]
+        return list(zip(*tree[index]))[0]
 
     
 def remove_backlinks(tree, child, parent):
@@ -99,6 +113,14 @@ def remove_backlinks(tree, child, parent):
 
         
 def make_rooted(tree, root=0):
+    """
+    Turn an unrooted tree into a rooted tree. All connections are turned from
+    bidirectional to unidirectional while keeping all nodes reachable from the chosen root.
+
+    :param tree:
+    :param root:
+    :return rooted_tree:
+    """
     t = deepcopy(tree)
     for child in get_children(t, root):
         remove_backlinks(t, child, root)
@@ -138,6 +160,10 @@ def get_points_radial(rooted_tree, root=0):
     """See Algorithm 1: RADIAL-LAYOUT in:
     Bachmaier, Christian, Ulrik Brandes, and Barbara Schlieper.
     "Drawing phylogenetic trees." Algorithms and Computation (2005): 1110-1121.
+
+    :param rooted_tree:
+    :param root:
+    :return:
     """
     l = {}
     x = {}
@@ -213,6 +239,10 @@ def get_points_circular(rooted_tree, root=0):
     "Drawing phylogenetic trees." Algorithms and Computation (2005): 1110-1121.
 
     It is important to remove negative distances in the tree before running this function.
+
+    :param rooted_tree:
+    :param root:
+    :return:
     """
     x = {}
     c = {}
@@ -226,6 +256,15 @@ def get_points_circular(rooted_tree, root=0):
 
 
 def set_distance_floor(tree, min_dist):
+    """
+    Change distances of a tree so no distance in the tree is below min_dist. If a
+    distance of a connection is increased another distance is decreased by the same
+    amount if this doesn't cause the latter distance to be below min_dist.
+
+    :param tree:
+    :param min_dist:
+    :return:
+    """
     for l in tree.values():
         if len(l) == 1 and l[0][1] < min_dist:
             l[0][1] = min_dist

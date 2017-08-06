@@ -3,6 +3,7 @@ Neighbor joining widget
 ------------------------
 
 """
+import random
 from collections import namedtuple
 from itertools import chain
 from math import atan2, pi
@@ -405,11 +406,16 @@ class OWNeighborJoining(widget.OWWidget):
         self.clear()
         self.information()
 
-        self.matrix = matrix
+        if matrix is not None and len(matrix) > 500:
+            indices = random.sample(range(len(matrix)), 500)
+            self.matrix = matrix.submatrix(indices)
+            self.information("Only 500 records displayed")
+        else:
+            self.matrix = matrix
         if self.matrix is not None:
-            ThreadExecutor().submit(self.first_stage)
+            ThreadExecutor().submit(self.process_data)
 
-    def first_stage(self):
+    def process_data(self):
         if self.matrix is not None:
             progress = ProgressBar(self, len(self.matrix) - 2)
             self.tree = run_neighbor_joining(self.matrix, progress)

@@ -168,6 +168,7 @@ class OWNeighborJoining(widget.OWWidget):
         self._item = None
         self.__legend = None
         self.__replot_requested = False
+        self.__executor = ThreadExecutor()
 
         box = gui.vBox(self.controlArea, "Drawing")
         box.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Maximum)
@@ -406,16 +407,19 @@ class OWNeighborJoining(widget.OWWidget):
         self.clear()
         self.information()
 
+        self.__executor.submit(self.process_data, matrix)
+
+    def process_data(self, matrix):
+        self.setBlocking(True)
+        self.setStatusMessage("Running")
+
         if matrix is not None and len(matrix) > 500:
             indices = random.sample(range(len(matrix)), 500)
             self.matrix = matrix.submatrix(indices)
             self.information("Only 500 records displayed")
         else:
             self.matrix = matrix
-        if self.matrix is not None:
-            ThreadExecutor().submit(self.process_data)
 
-    def process_data(self):
         if self.matrix is not None:
             progress = ProgressBar(self, len(self.matrix) - 2)
             self.tree = run_neighbor_joining(self.matrix, progress)
@@ -448,6 +452,8 @@ class OWNeighborJoining(widget.OWWidget):
 
                 self._invalidate_plot()
             progress.finish()
+        self.setBlocking(False)
+        self.setStatusMessage("")
 
     def handleNewSignals(self):
         self.commit()

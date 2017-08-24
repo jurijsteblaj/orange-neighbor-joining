@@ -34,9 +34,10 @@ from Orange.widgets.utils import colorpalette
 from Orange.widgets.utils.annotated_data import (
     create_annotated_table, ANNOTATED_DATA_SIGNAL_NAME
 )
-from Orange.widgets.utils.concurrent import ThreadExecutor
+from Orange.widgets.utils.concurrent import ThreadExecutor, FutureWatcher
 from Orange.widgets.utils.itemmodels import DomainModel
 from Orange.widgets.visualize.owscatterplotgraph import LegendItem, legend_anchor_pos
+from Orange.widgets.widget import Input, Output
 from neighborjoining.neighbor_joining import (
     run_neighbor_joining, make_rooted, get_points_radial, get_points_circular, get_children, set_distance_floor
 )
@@ -123,9 +124,12 @@ class OWNeighborJoining(widget.OWWidget):
                   "from the inputted distance matrix."
     priority = 100
 
-    inputs = [("Distances", DistMatrix, "set_distances")]
-    outputs = [("Selected Data", Table, widget.Default),
-               (ANNOTATED_DATA_SIGNAL_NAME, Table)]
+    class Inputs:
+        distances = Input("Distances", Orange.misc.DistMatrix)
+
+    class Outputs:
+        selected_data = Output("Selected Data", Orange.data.Table, default=True)
+        annotated_data = Output(ANNOTATED_DATA_SIGNAL_NAME, Orange.data.Table)
 
     settingsHandler = settings.DomainContextHandler()
 
@@ -402,7 +406,11 @@ class OWNeighborJoining(widget.OWWidget):
         self.new = np.arange(self.real[-1] + 1, len(points))
         self.coords = np.array([points[ix] for ix in sorted(points.keys())])
 
+    @Inputs.distances
     def set_distances(self, matrix):
+        if matrix is None or len(matrix) < 2:
+            matrix = None
+        self.setBlocking(True)
         self.closeContext()
         self.clear()
         self.information()
@@ -452,8 +460,8 @@ class OWNeighborJoining(widget.OWWidget):
 
                 self._invalidate_plot()
             progress.finish()
-        self.setBlocking(False)
         self.setStatusMessage("")
+        self.setBlocking(False)
 
     def handleNewSignals(self):
         self.commit()
@@ -493,6 +501,9 @@ class OWNeighborJoining(widget.OWWidget):
     def _setup_plot(self, reset_view=True):
         self.__replot_requested = False
         self.clear_plot()
+
+        if self.coords is None:
+            return
 
         X, Y = self.coords.T
         X -= (X.max() + X.min()) / 2
@@ -845,12 +856,11 @@ class OWNeighborJoining(widget.OWWidget):
             if len(indices) > 0:
                 subset = self.matrix.row_items[indices]
 
-        self.send("Selected Data", subset)
+        self.Outputs.selected_data.send(subset)
         if self.matrix is not None:
-            self.send(ANNOTATED_DATA_SIGNAL_NAME,
-                      create_annotated_table(self.matrix.row_items, indices))
+            self.Outputs.annotated_data.send(create_annotated_table(self.matrix.row_items, indices))
         else:
-            self.send(ANNOTATED_DATA_SIGNAL_NAME, None)
+            self.Outputs.annotated_data.send(None)
 
     def send_report(self):
         self.report_plot(name="", plot=self.viewbox.getViewBox())

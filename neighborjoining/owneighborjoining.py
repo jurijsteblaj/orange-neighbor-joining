@@ -133,10 +133,10 @@ class OWNeighborJoining(widget.OWWidget):
 
     settingsHandler = settings.DomainContextHandler()
 
-    attr_label = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
-    attr_color = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
-    attr_shape = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
-    attr_size = settings.ContextSetting(None, settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_label = settings.ContextSetting(None, not_attribute=settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_color = settings.ContextSetting(None, not_attribute=settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_shape = settings.ContextSetting(None, not_attribute=settings.ContextSetting.OPTIONAL, exclude_metas=False)
+    attr_size = settings.ContextSetting(None, not_attribute=settings.ContextSetting.OPTIONAL, exclude_metas=False)
 
     point_size = settings.Setting(10)
     alpha_value = settings.Setting(255)
@@ -482,7 +482,7 @@ class OWNeighborJoining(widget.OWWidget):
         self.shape_model.set_domain(domain)
 
         self.attr_label = None
-        self.attr_color = domain and self.matrix.row_items.domain.class_var or None
+        self.attr_color = domain is None and self.matrix.row_items.domain.class_var or None
         self.attr_size = None
         self.attr_shape = None
 

@@ -15,17 +15,21 @@ def run_neighbor_joining(d, progress=None):
     :param progress:
     :return tree:
     """
-    D = ma.array(d, copy=True)
+    real_nodes = d.shape[0]
+    D = ma.empty((2*real_nodes-2, 2*real_nodes-2))
+    D[:real_nodes,:real_nodes] = d
     D.mask = ma.make_mask_none(D.shape)
+    D.mask[real_nodes:,:] = True
+    D.mask[:,real_nodes:] = True
     joined_nodes = []
     
     result = {}
-    
-    n = len(D) - len(joined_nodes)
+    current_nodes = real_nodes
+    n = current_nodes - len(joined_nodes)
     while n > 2:
         # Based on the current distance matrix calculate the matrix Q
-        row_sums = np.sum(D, axis=1)
-        Q = ((n - 2)*D - row_sums).T - row_sums
+        row_sums = np.sum(D[:current_nodes,:current_nodes], axis=1)
+        Q = ((n - 2)*D[:current_nodes,:current_nodes] - row_sums).T - row_sums
         
         Q.mask[np.diag_indices(len(Q))] = True
         
@@ -40,24 +44,28 @@ def run_neighbor_joining(d, progress=None):
         
         if i not in result:
             result[i] = []
-        result[i].append([len(D), dist_i])
+        result[i].append([current_nodes, dist_i])
         if j not in result:
             result[j] = []
-        result[j].append([len(D), dist_j])
-        if len(D) not in result:
-            result[len(D)] = []
-        result[len(D)].append([i, dist_i])
-        result[len(D)].append([j, dist_j])
+        result[j].append([current_nodes, dist_j])
+        if current_nodes not in result:
+            result[current_nodes] = []
+        result[current_nodes].append([i, dist_i])
+        result[current_nodes].append([j, dist_j])
         
         # Calculate the distance from each of the taxa outside of this pair to the new node
         dist = D[i,j]
-        i_col = D[:,i]
-        j_col = D[:,j]
+        i_col = D[:current_nodes,i]
+        j_col = D[:current_nodes,j]
         new = (i_col + j_col - dist)/2
         
         # Add the new node to the distance matrix
-        D = ma.vstack((D, new))
-        D = ma.column_stack((D, ma.append(new, (0))))
+        D[current_nodes,:current_nodes] = new
+        D.mask[current_nodes,:current_nodes] = False
+        D[:current_nodes,current_nodes] = new
+        D.mask[:current_nodes,current_nodes] = False
+        D[current_nodes,current_nodes] = 0
+        D.mask[current_nodes,current_nodes] = False
         
         # Remove the two nodes which were joined
         D.mask[i,:] = True
@@ -68,10 +76,11 @@ def run_neighbor_joining(d, progress=None):
         joined_nodes.append(i)
         joined_nodes.append(j)
 
-        D.mask[-1,joined_nodes] = True
-        D.mask[joined_nodes,-1] = True
+        D.mask[current_nodes,joined_nodes] = True
+        D.mask[joined_nodes,current_nodes] = True
 
-        n = len(D) - len(joined_nodes)
+        current_nodes += 1
+        n = current_nodes - len(joined_nodes)
         if progress is not None:
             progress.advance()
     

@@ -1447,7 +1447,7 @@ def test_main(argv=None):
         filename = "yeast-class-RPR"
 
     data = Table(filename)
-    matrix = distance.Euclidean(distance._preprocess(data))
+    matrix = distance.Euclidean(data)
     app = QApplication([])
     w = OWNeighborJoining()
     w.set_distances(matrix)
